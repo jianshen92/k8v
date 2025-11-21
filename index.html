@@ -1,0 +1,3274 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Kubernetes Cluster Visualizer</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <script type="module">
+        import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';
+        window.mermaid = mermaid;
+    </script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, sans-serif;
+            background: #0a0a0a;
+            color: #e0e0e0;
+            overflow: hidden;
+        }
+
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+            padding: 20px;
+            gap: 16px;
+        }
+
+        /* Top Navigation */
+        .top-nav {
+            background: rgba(30, 30, 30, 0.6);
+            backdrop-filter: blur(20px);
+            border-radius: 16px;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            gap: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.06);
+            flex-shrink: 0;
+        }
+
+        .logo {
+            width: 40px;
+            height: 40px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 20px;
+        }
+
+        .nav-tabs {
+            display: flex;
+            gap: 8px;
+        }
+
+        .nav-tab {
+            padding: 10px 20px;
+            border-radius: 10px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: none;
+            background: transparent;
+            color: #888;
+        }
+
+        .nav-tab.active {
+            background: #C4F561;
+            color: #000;
+            letter-spacing: 1px;
+        }
+
+        .nav-tab:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+        }
+
+        .nav-right {
+            margin-left: auto;
+            display: flex;
+            gap: 12px;
+            align-items: center;
+        }
+
+        .icon-btn {
+            height: 40px;
+            padding: 0 16px;
+            border-radius: 10px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.3s;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            color: #888;
+        }
+
+        .icon-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: scale(1.05);
+            color: #fff;
+            letter-spacing: 1px;
+        }
+
+        .main-wrapper {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+            gap: 16px;
+        }
+
+        .sidebar {
+            flex: 1;
+            background: transparent;
+            padding: 0 32px 32px 32px;
+            overflow-y: auto;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 16px;
+            align-content: start;
+        }
+
+        .sidebar.compact {
+            width: 340px;
+            display: block;
+            border-right: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 0 20px 20px 20px;
+        }
+
+        .sidebar::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .sidebar::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .sidebar::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        .sidebar::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.15);
+        }
+
+        .header {
+            margin-bottom: 24px;
+            grid-column: 1 / -1;
+        }
+
+        .header h1 {
+            font-family: 'Inter', sans-serif;
+            font-size: 40px;
+            font-weight: 800;
+            margin-bottom: 6px;
+            background: linear-gradient(135deg, #fff 0%, #a0a0a0 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            letter-spacing: -1px;
+            line-height: 1;
+        }
+
+        .header-meta {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            margin-top: 8px;
+        }
+
+        .header-subtitle {
+            display: inline-block;
+            background: rgba(102, 126, 234, 0.2);
+            color: #667eea;
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+        }
+
+        .welcome-text {
+            font-size: 13px;
+            color: #666;
+            margin-bottom: 6px;
+        }
+
+        .view-toggle {
+            display: none;
+        }
+
+        /* Action Bar */
+        .action-bar {
+            display: flex;
+            justify-content: flex-end;
+            align-items: center;
+            margin-bottom: 24px;
+            grid-column: 1 / -1;
+            gap: 12px;
+        }
+
+        .btn {
+            padding: 12px 24px;
+            border-radius: 12px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.3s;
+            border: none;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .btn-secondary {
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-secondary:hover {
+            background: rgba(255, 255, 255, 0.08);
+            transform: translateY(-2px);
+            letter-spacing: 1px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: #fff;
+            box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+        }
+
+        .btn-primary:hover {
+            box-shadow: 0 8px 25px rgba(102, 126, 234, 0.4);
+            transform: translateY(-2px);
+            letter-spacing: 1px;
+        }
+
+        .stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 16px;
+            margin-bottom: 24px;
+            grid-column: 1 / -1;
+        }
+
+        .stat-card {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(10px);
+            padding: 20px;
+            border-radius: 16px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .stat-card::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 3px;
+            background: linear-gradient(90deg, #4CAF50, #8BC34A);
+        }
+
+        .stat-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+            border-color: rgba(255, 255, 255, 0.15);
+        }
+
+        .stat-card.warning::before {
+            background: linear-gradient(90deg, #FFC107, #FF9800);
+        }
+
+        .stat-card.error::before {
+            background: linear-gradient(90deg, #f44336, #E91E63);
+        }
+
+        .stat-card.primary::before {
+            background: linear-gradient(90deg, #667eea, #764ba2);
+        }
+
+        .stat-card.highlight {
+            background: linear-gradient(135deg, #C4F561 0%, #9FD356 100%);
+            border: 1px solid rgba(196, 245, 97, 0.3);
+        }
+
+        .stat-card.highlight * {
+            color: #000 !important;
+        }
+
+        .stat-card.highlight::before {
+            display: none;
+        }
+
+        .stat-card.highlight:hover {
+            box-shadow: 0 12px 40px rgba(196, 245, 97, 0.4);
+        }
+
+        .stat-card.highlight .stat-label {
+            color: rgba(0, 0, 0, 0.6) !important;
+        }
+
+        .stat-card.highlight .stat-value {
+            background: linear-gradient(135deg, #000 0%, rgba(0, 0, 0, 0.7) 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .stat-card.highlight .stat-change {
+            color: rgba(0, 0, 0, 0.7) !important;
+        }
+
+        .stat-card.warning {
+            border: 1px solid rgba(255, 193, 7, 0.2);
+        }
+
+        .stat-card.error {
+            border: 1px solid rgba(244, 67, 54, 0.2);
+        }
+
+        .stat-label {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 11px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-weight: 600;
+            margin-bottom: 8px;
+        }
+
+        .stat-value {
+            font-size: 32px;
+            font-weight: 800;
+            background: linear-gradient(135deg, #fff 0%, #888 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+            line-height: 1;
+            margin-bottom: 6px;
+        }
+
+        .stat-change {
+            font-size: 12px;
+            color: #4CAF50;
+            font-weight: 600;
+        }
+
+        .stat-change.negative {
+            color: #f44336;
+        }
+
+        .resource-filter {
+            margin-bottom: 24px;
+            grid-column: 1 / -1;
+        }
+
+        .compact .resource-filter {
+            grid-column: auto;
+        }
+
+        .resource-filter h2 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 18px;
+            margin-bottom: 16px;
+            color: #fff;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .filter-buttons {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-bottom: 16px;
+        }
+
+        .filter-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            color: #888;
+            padding: 10px 20px;
+            border-radius: 12px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 13px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            flex: 1;
+            min-width: 110px;
+            backdrop-filter: blur(10px);
+        }
+
+        .filter-btn:hover:not(.active) {
+            background: rgba(255, 255, 255, 0.08);
+            color: #fff;
+            transform: translateY(-2px);
+            letter-spacing: 1px;
+        }
+
+        .filter-btn.active {
+            background: #C4F561;
+            border-color: #C4F561;
+            color: #000;
+            box-shadow: 0 8px 20px rgba(196, 245, 97, 0.3);
+            letter-spacing: 1px;
+        }
+
+        .resource-list {
+            max-height: 600px;
+            overflow-y: auto;
+            margin-bottom: 20px;
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 10px;
+        }
+
+        .resource-list::-webkit-scrollbar {
+            width: 6px;
+        }
+
+        .resource-list::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.02);
+            border-radius: 3px;
+        }
+
+        .resource-list::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+
+        .compact .resource-list {
+            max-height: 300px;
+        }
+
+        .resource-item {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(10px);
+            padding: 12px;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            position: relative;
+            overflow: hidden;
+        }
+
+        .resource-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: linear-gradient(180deg, rgba(76, 175, 80, 0.8), rgba(76, 175, 80, 0.4));
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .resource-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+            transform: translateX(4px);
+            border-color: rgba(255, 255, 255, 0.15);
+            box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+        }
+
+        .resource-item:hover::before {
+            opacity: 1;
+        }
+
+        .resource-header {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+            min-width: 0;
+        }
+
+        .resource-item.pod::before {
+            background: linear-gradient(180deg, #4CAF50, #8BC34A);
+        }
+
+        .resource-item.deployment::before {
+            background: linear-gradient(180deg, #2196F3, #03A9F4);
+        }
+
+        .resource-item.service::before {
+            background: linear-gradient(180deg, #9C27B0, #E91E63);
+        }
+
+        .resource-item.ingress::before {
+            background: linear-gradient(180deg, #FF9800, #FFC107);
+        }
+
+        .resource-item.replicaset::before {
+            background: linear-gradient(180deg, #00BCD4, #009688);
+        }
+
+        .resource-item.configmap::before,
+        .resource-item.secret::before {
+            background: linear-gradient(180deg, #607D8B, #78909C);
+        }
+
+        .resource-icon {
+            width: 32px;
+            height: 32px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 16px;
+            flex-shrink: 0;
+            transition: all 0.3s;
+        }
+
+        .resource-item:hover .resource-icon {
+            transform: scale(1.05);
+        }
+
+        .resource-icon.pod {
+            background: linear-gradient(135deg, rgba(76, 175, 80, 0.2), rgba(139, 195, 74, 0.2));
+            color: #8BC34A;
+            box-shadow: 0 4px 12px rgba(76, 175, 80, 0.2);
+        }
+
+        .resource-icon.deployment {
+            background: linear-gradient(135deg, rgba(33, 150, 243, 0.2), rgba(3, 169, 244, 0.2));
+            color: #03A9F4;
+            box-shadow: 0 4px 12px rgba(33, 150, 243, 0.2);
+        }
+
+        .resource-icon.service {
+            background: linear-gradient(135deg, rgba(156, 39, 176, 0.2), rgba(233, 30, 99, 0.2));
+            color: #E91E63;
+            box-shadow: 0 4px 12px rgba(156, 39, 176, 0.2);
+        }
+
+        .resource-icon.ingress {
+            background: linear-gradient(135deg, rgba(255, 152, 0, 0.2), rgba(255, 193, 7, 0.2));
+            color: #FFC107;
+            box-shadow: 0 4px 12px rgba(255, 152, 0, 0.2);
+        }
+
+        .resource-icon.replicaset {
+            background: linear-gradient(135deg, rgba(0, 188, 212, 0.2), rgba(0, 150, 136, 0.2));
+            color: #00BCD4;
+            box-shadow: 0 4px 12px rgba(0, 188, 212, 0.2);
+        }
+
+        .resource-icon.configmap,
+        .resource-icon.secret {
+            background: linear-gradient(135deg, rgba(96, 125, 139, 0.2), rgba(120, 144, 156, 0.2));
+            color: #78909C;
+            box-shadow: 0 4px 12px rgba(96, 125, 139, 0.2);
+        }
+
+        .resource-info {
+            flex: 1;
+            min-width: 0;
+        }
+
+        .resource-name {
+            font-size: 13px;
+            font-weight: 700;
+            color: #fff;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            margin-bottom: 2px;
+            line-height: 1.2;
+        }
+
+        .resource-subtitle {
+            font-size: 11px;
+            color: #666;
+            font-weight: 500;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+        }
+
+        .resource-status {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            flex-shrink: 0;
+            box-shadow: 0 0 6px currentColor;
+        }
+
+        .resource-status.healthy {
+            background: #4CAF50;
+            color: #4CAF50;
+        }
+
+        .resource-status.warning {
+            background: #FFC107;
+            color: #FFC107;
+        }
+
+        .resource-status.error {
+            background: #f44336;
+            color: #f44336;
+            animation: pulse-error 2s infinite;
+        }
+
+        @keyframes pulse-error {
+            0%, 100% { 
+                opacity: 1;
+                box-shadow: 0 0 6px #f44336;
+            }
+            50% { 
+                opacity: 0.6;
+                box-shadow: 0 0 12px #f44336;
+            }
+        }
+
+        .events {
+            margin-top: 24px;
+            grid-column: 1 / -1;
+        }
+
+        .compact .events {
+            grid-column: auto;
+            margin-top: 24px;
+        }
+
+        .events h2 {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 18px;
+            margin-bottom: 16px;
+            color: #fff;
+            font-weight: 700;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+        }
+
+        .event-item {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(10px);
+            padding: 12px;
+            margin-bottom: 8px;
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            font-size: 12px;
+            position: relative;
+            overflow: hidden;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        .event-item::before {
+            content: '';
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            width: 3px;
+            background: linear-gradient(180deg, #4CAF50, #8BC34A);
+        }
+
+        .event-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+            border-color: rgba(255, 255, 255, 0.1);
+            transform: translateX(4px);
+        }
+
+        .event-item.warning::before {
+            background: linear-gradient(180deg, #FFC107, #FF9800);
+        }
+
+        .event-item.error::before {
+            background: linear-gradient(180deg, #f44336, #E91E63);
+        }
+
+        .event-time {
+            font-size: 10px;
+            color: #555;
+            margin-bottom: 4px;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .event-message {
+            color: #ccc;
+            font-weight: 500;
+            line-height: 1.4;
+            font-size: 12px;
+        }
+
+        .event-source {
+            font-size: 10px;
+            color: #666;
+            margin-top: 4px;
+            font-weight: 500;
+        }
+
+        .canvas-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background: transparent;
+            display: none;
+            padding: 40px;
+            cursor: grab;
+        }
+
+        .canvas-container.dragging {
+            cursor: grabbing;
+        }
+
+        .canvas-container.visible {
+            display: flex;
+            align-items: flex-start;
+            justify-content: flex-start;
+        }
+
+        .canvas {
+            width: fit-content;
+            height: fit-content;
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            will-change: transform;
+        }
+
+        #mermaidDiagram {
+            width: 100%;
+            height: 100%;
+            min-height: 600px;
+            position: relative;
+        }
+
+        #mermaidDiagram svg {
+            max-width: none !important;
+            min-width: 1200px;
+            min-height: 800px;
+        }
+
+        /* Mermaid node styling to match dashboard */
+        #mermaidDiagram .node rect,
+        #mermaidDiagram .node circle,
+        #mermaidDiagram .node ellipse,
+        #mermaidDiagram .node polygon {
+            stroke-width: 2px !important;
+            filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.4));
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            rx: 12 !important;
+            ry: 12 !important;
+        }
+
+        #mermaidDiagram .node {
+            cursor: pointer !important;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        #mermaidDiagram .node:hover rect,
+        #mermaidDiagram .node:hover circle,
+        #mermaidDiagram .node:hover ellipse,
+        #mermaidDiagram .node:hover polygon {
+            stroke-width: 3px !important;
+        }
+
+        /* Add glow effect on hover for different resource types */
+        #mermaidDiagram .node.ingressStyle:hover rect,
+        #mermaidDiagram .node.ingressStyle:hover polygon {
+            filter: drop-shadow(0 8px 24px rgba(255, 152, 0, 0.6)) brightness(1.4);
+        }
+
+        #mermaidDiagram .node.serviceStyle:hover rect,
+        #mermaidDiagram .node.serviceStyle:hover polygon {
+            filter: drop-shadow(0 8px 24px rgba(156, 39, 176, 0.6)) brightness(1.4);
+        }
+
+        #mermaidDiagram .node.deploymentStyle:hover rect,
+        #mermaidDiagram .node.deploymentStyle:hover polygon {
+            filter: drop-shadow(0 8px 24px rgba(33, 150, 243, 0.6)) brightness(1.4);
+        }
+
+        #mermaidDiagram .node.replicasetStyle:hover rect,
+        #mermaidDiagram .node.replicasetStyle:hover polygon {
+            filter: drop-shadow(0 8px 24px rgba(0, 188, 212, 0.6)) brightness(1.4);
+        }
+
+        #mermaidDiagram .node.podStyle:hover rect,
+        #mermaidDiagram .node.podStyle:hover polygon {
+            filter: drop-shadow(0 8px 24px rgba(76, 175, 80, 0.6)) brightness(1.4);
+        }
+
+        #mermaidDiagram .node.configStyle:hover rect,
+        #mermaidDiagram .node.configStyle:hover polygon {
+            filter: drop-shadow(0 8px 24px rgba(96, 125, 139, 0.6)) brightness(1.4);
+        }
+
+        #mermaidDiagram .node.secretStyle:hover rect,
+        #mermaidDiagram .node.secretStyle:hover polygon {
+            filter: drop-shadow(0 8px 24px rgba(121, 85, 72, 0.6)) brightness(1.4);
+        }
+
+        #mermaidDiagram .nodeLabel {
+            font-family: 'Space Grotesk', sans-serif !important;
+            font-size: 13px !important;
+            font-weight: 600 !important;
+            letter-spacing: 0.3px !important;
+        }
+
+        #mermaidDiagram .edgeLabel {
+            font-family: 'Inter', sans-serif !important;
+            font-size: 11px !important;
+            background: rgba(30, 30, 30, 0.9) !important;
+            padding: 4px 8px !important;
+            border-radius: 4px !important;
+        }
+
+        /* Edge styling */
+        #mermaidDiagram .edgePath path {
+            stroke-width: 2px !important;
+            stroke: rgba(102, 126, 234, 0.4) !important;
+            transition: all 0.3s;
+        }
+
+        #mermaidDiagram .node:hover ~ .edgePath path,
+        #mermaidDiagram .edgePath:hover path {
+            stroke: rgba(102, 126, 234, 0.8) !important;
+            stroke-width: 3px !important;
+        }
+
+        .zoom-controls {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+            z-index: 10;
+        }
+
+        .zoom-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 8px;
+            background: rgba(30, 30, 30, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            color: #fff;
+            font-size: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.2s;
+        }
+
+        .zoom-btn:hover {
+            background: rgba(50, 50, 50, 0.9);
+            border-color: rgba(255, 255, 255, 0.2);
+            transform: scale(1.05);
+        }
+
+        .zoom-level {
+            background: rgba(30, 30, 30, 0.9);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 8px 12px;
+            color: #888;
+            font-size: 12px;
+            font-weight: 600;
+            text-align: center;
+            font-family: 'Space Grotesk', sans-serif;
+        }
+
+        .detail-panel {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 700px;
+            max-width: 90vw;
+            max-height: 85vh;
+            background: rgba(18, 18, 18, 0.95);
+            backdrop-filter: blur(40px);
+            border-radius: 24px;
+            box-shadow: 0 24px 80px rgba(0, 0, 0, 0.8);
+            overflow: hidden;
+            display: none;
+            z-index: 1000;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            transition: opacity 0.2s, transform 0.2s;
+        }
+
+        .detail-panel.visible {
+            display: flex;
+            flex-direction: column;
+            animation: modalSlideIn 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+
+        @keyframes modalSlideIn {
+            from {
+                opacity: 0;
+                transform: translate(-50%, -45%);
+            }
+            to {
+                opacity: 1;
+                transform: translate(-50%, -50%);
+            }
+        }
+
+        .detail-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(8px);
+            z-index: 999;
+            display: none;
+        }
+
+        .detail-overlay.visible {
+            display: block;
+            animation: fadeIn 0.3s ease;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+
+        .detail-header {
+            padding: 28px 32px;
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .detail-title {
+            font-size: 22px;
+            font-weight: 700;
+            color: #fff;
+            margin-bottom: 4px;
+        }
+
+        .detail-type {
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            font-weight: 600;
+        }
+
+        .close-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: none;
+            color: #888;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 40px;
+            height: 40px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 12px;
+            transition: all 0.3s;
+        }
+
+        .close-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: #fff;
+            transform: rotate(90deg);
+        }
+
+        .detail-tabs {
+            display: flex;
+            background: rgba(255, 255, 255, 0.02);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding: 0 32px;
+        }
+
+        .tab {
+            padding: 16px 24px;
+            font-family: 'Space Grotesk', sans-serif;
+            font-size: 14px;
+            font-weight: 600;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.3s;
+            color: #666;
+        }
+
+        .tab:hover {
+            background: rgba(255, 255, 255, 0.03);
+            color: #aaa;
+            letter-spacing: 1px;
+        }
+
+        .tab.active {
+            border-bottom-color: #667eea;
+            color: #fff;
+            background: rgba(102, 126, 234, 0.1);
+            letter-spacing: 1px;
+        }
+
+        .tab-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-width: 20px;
+            height: 20px;
+            padding: 0 6px;
+            border-radius: 10px;
+            background: rgba(196, 245, 97, 0.2);
+            color: #C4F561;
+            font-size: 11px;
+            font-weight: 700;
+            margin-left: 8px;
+        }
+
+        .tab.active .tab-badge {
+            background: rgba(196, 245, 97, 0.3);
+        }
+
+        .detail-content {
+            flex: 1;
+            overflow-y: auto;
+            padding: 28px 32px;
+            position: relative;
+        }
+
+        .detail-content::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        .detail-content::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .detail-content::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+        }
+
+        .yaml-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 16px;
+        }
+
+        .copy-btn {
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            background: rgba(255, 255, 255, 0.05);
+            color: #fff;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .copy-btn:hover {
+            background: rgba(196, 245, 97, 0.15);
+            border-color: #C4F561;
+            color: #C4F561;
+        }
+
+        .copy-btn.copied {
+            background: rgba(76, 175, 80, 0.2);
+            border-color: #4CAF50;
+            color: #4CAF50;
+        }
+
+        .yaml-view {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 20px;
+            border-radius: 16px;
+            font-family: 'SF Mono', 'Monaco', 'Courier New', monospace;
+            font-size: 13px;
+            line-height: 1.8;
+            overflow-x: auto;
+            white-space: pre;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            color: #e0e0e0;
+        }
+
+        .yaml-view::-webkit-scrollbar {
+            height: 6px;
+        }
+
+        .yaml-view::-webkit-scrollbar-track {
+            background: rgba(255, 255, 255, 0.02);
+        }
+
+        .yaml-view::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+
+        .yaml-key {
+            color: #667eea;
+        }
+
+        .yaml-string {
+            color: #8BC34A;
+        }
+
+        .yaml-number {
+            color: #FF9800;
+        }
+
+        .yaml-link {
+            color: #C4F561;
+            text-decoration: underline;
+            text-decoration-style: dotted;
+            text-decoration-color: rgba(196, 245, 97, 0.4);
+            cursor: pointer;
+            transition: all 0.2s;
+            position: relative;
+            padding: 2px 4px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+
+        .yaml-link:hover {
+            background: rgba(196, 245, 97, 0.15);
+            color: #fff;
+            text-decoration-color: #C4F561;
+        }
+
+        .yaml-link::after {
+            content: '→';
+            margin-left: 4px;
+            opacity: 0;
+            transition: opacity 0.2s;
+            color: #C4F561;
+            font-weight: bold;
+        }
+
+        .yaml-link:hover::after {
+            opacity: 1;
+        }
+
+        .relationships {
+            display: flex;
+            flex-direction: column;
+            gap: 24px;
+        }
+
+        .relationship-section h3 {
+            font-size: 14px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            margin-bottom: 12px;
+            font-weight: 700;
+        }
+
+        .relationship-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        .relationship-item {
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(10px);
+            padding: 14px 16px;
+            border-radius: 12px;
+            font-size: 14px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            font-weight: 600;
+        }
+
+        .relationship-item:hover {
+            background: rgba(255, 255, 255, 0.06);
+            transform: translateX(8px);
+            border-color: rgba(102, 126, 234, 0.3);
+        }
+
+        .relationship-arrow {
+            color: #667eea;
+            font-size: 20px;
+            font-weight: 700;
+        }
+
+        .health-status {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.03);
+            backdrop-filter: blur(10px);
+            border-radius: 16px;
+            margin-bottom: 24px;
+            border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .health-icon {
+            width: 56px;
+            height: 56px;
+            border-radius: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 28px;
+        }
+
+        .health-icon.healthy {
+            background: linear-gradient(135deg, rgba(76, 175, 80, 0.2), rgba(139, 195, 74, 0.2));
+            color: #8BC34A;
+            box-shadow: 0 8px 24px rgba(76, 175, 80, 0.2);
+        }
+
+        .health-icon.warning {
+            background: linear-gradient(135deg, rgba(255, 193, 7, 0.2), rgba(255, 152, 0, 0.2));
+            color: #FFC107;
+            box-shadow: 0 8px 24px rgba(255, 193, 7, 0.2);
+        }
+
+        .health-icon.error {
+            background: linear-gradient(135deg, rgba(244, 67, 54, 0.2), rgba(233, 30, 99, 0.2));
+            color: #f44336;
+            box-shadow: 0 8px 24px rgba(244, 67, 54, 0.2);
+        }
+
+        .health-info {
+            flex: 1;
+        }
+
+        .health-label {
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            font-weight: 600;
+        }
+
+        .health-value {
+            font-size: 20px;
+            font-weight: 700;
+            color: #fff;
+            margin-top: 4px;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="detail-overlay" id="detailOverlay" onclick="closeDetailPanel()"></div>
+        
+        <!-- Top Navigation -->
+        <div class="top-nav">
+            <div class="logo">☸</div>
+            <div class="nav-tabs">
+                <button class="nav-tab active" onclick="switchView('dashboard')">Overview</button>
+                <button class="nav-tab" onclick="switchView('topology')">Topology</button>
+                <button class="nav-tab">Workloads</button>
+                <button class="nav-tab">Network</button>
+            </div>
+            <div class="nav-right">
+                <div class="icon-btn">Search</div>
+                <div class="icon-btn">Alerts</div>
+                <div class="icon-btn">Profile</div>
+            </div>
+        </div>
+
+        <div class="main-wrapper">
+            <div class="sidebar" id="sidebar">
+            <div class="header">
+                <div class="welcome-text">Welcome back,</div>
+                <h1>Kubernetes Cluster</h1>
+                <div class="header-meta">
+                    <span class="header-subtitle">Production • us-west-2</span>
+                </div>
+            </div>
+
+            <div class="action-bar">
+                <button class="btn btn-secondary" onclick="switchView('topology')">
+                    View Topology
+                </button>
+                <button class="btn btn-primary">
+                    Download Report
+                </button>
+            </div>
+
+            <div class="stats">
+                <div class="stat-card highlight">
+                    <div class="stat-label">Healthy Nodes</div>
+                    <div class="stat-value" id="healthyCount">47</div>
+                    <div class="stat-change">+5 from last week</div>
+                </div>
+                <div class="stat-card warning">
+                    <div class="stat-label">Warnings</div>
+                    <div class="stat-value" id="warningCount">5</div>
+                    <div class="stat-change">+2 new alerts</div>
+                </div>
+                <div class="stat-card error">
+                    <div class="stat-label">Errors</div>
+                    <div class="stat-value" id="errorCount">4</div>
+                    <div class="stat-change">Needs attention</div>
+                </div>
+                <div class="stat-card primary">
+                    <div class="stat-label">Total Resources</div>
+                    <div class="stat-value" id="totalCount">56</div>
+                    <div class="stat-change">Across 3 namespaces</div>
+                </div>
+            </div>
+
+            <div class="resource-filter">
+                <h2>Resources by Type</h2>
+                <div class="filter-buttons">
+                    <button class="filter-btn active" onclick="filterResources('all')">All</button>
+                    <button class="filter-btn" onclick="filterResources('pod')">Pods</button>
+                    <button class="filter-btn" onclick="filterResources('deployment')">Deployments</button>
+                    <button class="filter-btn" onclick="filterResources('service')">Services</button>
+                    <button class="filter-btn" onclick="filterResources('ingress')">Ingress</button>
+                    <button class="filter-btn" onclick="filterResources('replicaset')">ReplicaSets</button>
+                    <button class="filter-btn" onclick="filterResources('configmap')">ConfigMaps</button>
+                    <button class="filter-btn" onclick="filterResources('secret')">Secrets</button>
+                </div>
+                <div class="resource-list" id="resourceList"></div>
+            </div>
+
+            <div class="events">
+                <h2>Recent Events</h2>
+                <div id="eventsList">
+                    <div class="event-item error">
+                        <div class="event-time">2 minutes ago</div>
+                        <div class="event-message">Pod elasticsearch-deployment-pod-1 has CrashLoopBackOff</div>
+                        <div class="event-source">Pod: elasticsearch-deployment-pod-1 • logging</div>
+                    </div>
+                    <div class="event-item warning">
+                        <div class="event-time">5 minutes ago</div>
+                        <div class="event-message">High memory usage detected (85%)</div>
+                        <div class="event-source">Pod: api-deployment-pod-3 • default</div>
+                    </div>
+                    <div class="event-item warning">
+                        <div class="event-time">8 minutes ago</div>
+                        <div class="event-message">Admin service has 1 unhealthy endpoint</div>
+                        <div class="event-source">Service: admin-service • default</div>
+                    </div>
+                    <div class="event-item">
+                        <div class="event-time">12 minutes ago</div>
+                        <div class="event-message">Successfully scaled deployment to 4 replicas</div>
+                        <div class="event-source">Deployment: api-deployment • default</div>
+                    </div>
+                    <div class="event-item">
+                        <div class="event-time">18 minutes ago</div>
+                        <div class="event-message">Successfully pulled image "grafana:9.3.0"</div>
+                        <div class="event-source">Pod: grafana-deployment-pod-2 • monitoring</div>
+                    </div>
+                    <div class="event-item">
+                        <div class="event-time">25 minutes ago</div>
+                        <div class="event-message">ConfigMap updated successfully</div>
+                        <div class="event-source">ConfigMap: app-config • default</div>
+                    </div>
+                    <div class="event-item">
+                        <div class="event-time">32 minutes ago</div>
+                        <div class="event-message">Ingress successfully updated with new routes</div>
+                        <div class="event-source">Ingress: main-ingress • default</div>
+                    </div>
+                    <div class="event-item">
+                        <div class="event-time">45 minutes ago</div>
+                        <div class="event-message">Worker pods processing queue successfully</div>
+                        <div class="event-source">Deployment: worker-deployment • default</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="canvas-container" id="canvasContainer">
+            <div class="zoom-controls">
+                <button class="zoom-btn" onclick="zoomIn()" title="Zoom In">+</button>
+                <button class="zoom-btn" onclick="zoomOut()" title="Zoom Out">−</button>
+                <button class="zoom-btn" onclick="resetZoom()" title="Reset Zoom">⟲</button>
+                <div class="zoom-level" id="zoomLevel">100%</div>
+            </div>
+            <div class="canvas" id="canvas">
+                <div id="mermaidDiagram"></div>
+            </div>
+        </div>
+        </div>
+
+        <div class="detail-panel" id="detailPanel">
+                <div class="detail-header">
+                    <div>
+                        <div class="detail-type" id="detailType"></div>
+                        <div class="detail-title" id="detailTitle"></div>
+                    </div>
+                    <button class="close-btn" onclick="closeDetailPanel()">×</button>
+                </div>
+                <div class="detail-tabs">
+                    <div class="tab active" onclick="switchTab('overview')">Overview</div>
+                    <div class="tab" onclick="switchTab('yaml')">YAML</div>
+                    <div class="tab" onclick="switchTab('relationships')">
+                        Relationships
+                        <span class="tab-badge" id="relationshipBadge">0</span>
+                    </div>
+                </div>
+                <div class="detail-content">
+                    <div id="overviewTab">
+                        <div class="health-status" id="healthStatus"></div>
+                        <div id="overviewContent"></div>
+                    </div>
+                    <div id="yamlTab" style="display: none;">
+                        <div class="yaml-header">
+                            <span style="font-size: 12px; color: #666;">Resource names in <span style="color: #C4F561;">green</span> are clickable</span>
+                            <button class="copy-btn" onclick="copyYamlToClipboard()">
+                                <span>📋</span> Copy YAML
+                            </button>
+                        </div>
+                        <div class="yaml-view" id="yamlContent"></div>
+                    </div>
+                    <div id="relationshipsTab" style="display: none;">
+                        <div class="relationships" id="relationshipsContent"></div>
+                    </div>
+                </div>
+        </div>
+    </div>
+
+    <script>
+        // Mock Kubernetes data - Medium-sized cluster simulation
+        const k8sData = {
+            ingress: {
+                'main-ingress': {
+                    type: 'Ingress',
+                    name: 'main-ingress',
+                    namespace: 'default',
+                    health: 'healthy',
+                    routes: ['frontend-service', 'api-service', 'admin-service'],
+                    yaml: `apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: main-ingress
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /
+spec:
+  rules:
+  - host: myapp.example.com
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: frontend-service
+            port:
+              number: 80
+      - path: /api
+        pathType: Prefix
+        backend:
+          service:
+            name: api-service
+            port:
+              number: 8080
+      - path: /admin
+        pathType: Prefix
+        backend:
+          service:
+            name: admin-service
+            port:
+              number: 3000`
+                },
+                'monitoring-ingress': {
+                    type: 'Ingress',
+                    name: 'monitoring-ingress',
+                    namespace: 'monitoring',
+                    health: 'healthy',
+                    routes: ['prometheus-service', 'grafana-service'],
+                    yaml: `apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: monitoring-ingress
+  namespace: monitoring
+spec:
+  rules:
+  - host: monitoring.example.com
+    http:
+      paths:
+      - path: /prometheus
+        pathType: Prefix
+        backend:
+          service:
+            name: prometheus-service
+            port:
+              number: 9090
+      - path: /grafana
+        pathType: Prefix
+        backend:
+          service:
+            name: grafana-service
+            port:
+              number: 3000`
+                }
+            },
+            services: {
+                'frontend-service': {
+                    type: 'Service',
+                    name: 'frontend-service',
+                    namespace: 'default',
+                    health: 'healthy',
+                    routedBy: ['main-ingress'],
+                    exposes: ['frontend-deployment-pod-1', 'frontend-deployment-pod-2', 'frontend-deployment-pod-3'],
+                    yaml: `apiVersion: v1
+kind: Service
+metadata:
+  name: frontend-service
+  namespace: default
+spec:
+  selector:
+    app: frontend
+  ports:
+  - protocol: TCP
+    port: 80
+    targetPort: 3000
+  type: ClusterIP`
+                },
+                'api-service': {
+                    type: 'Service',
+                    name: 'api-service',
+                    namespace: 'default',
+                    health: 'healthy',
+                    routedBy: ['main-ingress'],
+                    exposes: ['api-deployment-pod-1', 'api-deployment-pod-2', 'api-deployment-pod-3', 'api-deployment-pod-4'],
+                    yaml: `apiVersion: v1
+kind: Service
+metadata:
+  name: api-service
+  namespace: default
+spec:
+  selector:
+    app: api
+  ports:
+  - protocol: TCP
+    port: 8080
+    targetPort: 8080
+  type: ClusterIP`
+                },
+                'admin-service': {
+                    type: 'Service',
+                    name: 'admin-service',
+                    namespace: 'default',
+                    health: 'warning',
+                    routedBy: ['main-ingress'],
+                    exposes: ['admin-deployment-pod-1', 'admin-deployment-pod-2'],
+                    yaml: `apiVersion: v1
+kind: Service
+metadata:
+  name: admin-service
+  namespace: default
+spec:
+  selector:
+    app: admin
+  ports:
+  - protocol: TCP
+    port: 3000
+    targetPort: 3000
+  type: ClusterIP`
+                },
+                'database-service': {
+                    type: 'Service',
+                    name: 'database-service',
+                    namespace: 'default',
+                    health: 'healthy',
+                    exposes: ['database-deployment-pod-1'],
+                    yaml: `apiVersion: v1
+kind: Service
+metadata:
+  name: database-service
+  namespace: default
+spec:
+  selector:
+    app: postgres
+  ports:
+  - protocol: TCP
+    port: 5432
+    targetPort: 5432
+  type: ClusterIP`
+                },
+                'redis-service': {
+                    type: 'Service',
+                    name: 'redis-service',
+                    namespace: 'default',
+                    health: 'healthy',
+                    exposes: ['redis-deployment-pod-1', 'redis-deployment-pod-2'],
+                    yaml: `apiVersion: v1
+kind: Service
+metadata:
+  name: redis-service
+  namespace: default
+spec:
+  selector:
+    app: redis
+  ports:
+  - protocol: TCP
+    port: 6379
+    targetPort: 6379
+  type: ClusterIP`
+                },
+                'worker-service': {
+                    type: 'Service',
+                    name: 'worker-service',
+                    namespace: 'default',
+                    health: 'healthy',
+                    exposes: ['worker-deployment-pod-1', 'worker-deployment-pod-2', 'worker-deployment-pod-3'],
+                    yaml: `apiVersion: v1
+kind: Service
+metadata:
+  name: worker-service
+  namespace: default
+spec:
+  selector:
+    app: worker
+  ports:
+  - protocol: TCP
+    port: 9000
+    targetPort: 9000
+  type: ClusterIP`
+                },
+                'elasticsearch-service': {
+                    type: 'Service',
+                    name: 'elasticsearch-service',
+                    namespace: 'logging',
+                    health: 'error',
+                    exposes: ['elasticsearch-deployment-pod-1'],
+                    yaml: `apiVersion: v1
+kind: Service
+metadata:
+  name: elasticsearch-service
+  namespace: logging
+spec:
+  selector:
+    app: elasticsearch
+  ports:
+  - protocol: TCP
+    port: 9200
+    targetPort: 9200
+  type: ClusterIP`
+                },
+                'kibana-service': {
+                    type: 'Service',
+                    name: 'kibana-service',
+                    namespace: 'logging',
+                    health: 'healthy',
+                    exposes: ['kibana-deployment-pod-1'],
+                    yaml: `apiVersion: v1
+kind: Service
+metadata:
+  name: kibana-service
+  namespace: logging
+spec:
+  selector:
+    app: kibana
+  ports:
+  - protocol: TCP
+    port: 5601
+    targetPort: 5601
+  type: ClusterIP`
+                },
+                'prometheus-service': {
+                    type: 'Service',
+                    name: 'prometheus-service',
+                    namespace: 'monitoring',
+                    health: 'healthy',
+                    routedBy: ['monitoring-ingress'],
+                    exposes: ['prometheus-deployment-pod-1'],
+                    yaml: `apiVersion: v1
+kind: Service
+metadata:
+  name: prometheus-service
+  namespace: monitoring
+spec:
+  selector:
+    app: prometheus
+  ports:
+  - protocol: TCP
+    port: 9090
+    targetPort: 9090
+  type: ClusterIP`
+                },
+                'grafana-service': {
+                    type: 'Service',
+                    name: 'grafana-service',
+                    namespace: 'monitoring',
+                    health: 'healthy',
+                    routedBy: ['monitoring-ingress'],
+                    exposes: ['grafana-deployment-pod-1', 'grafana-deployment-pod-2'],
+                    yaml: `apiVersion: v1
+kind: Service
+metadata:
+  name: grafana-service
+  namespace: monitoring
+spec:
+  selector:
+    app: grafana
+  ports:
+  - protocol: TCP
+    port: 3000
+    targetPort: 3000
+  type: ClusterIP`
+                }
+            },
+            deployments: {
+                'frontend-deployment': {
+                    type: 'Deployment',
+                    name: 'frontend-deployment',
+                    namespace: 'default',
+                    health: 'healthy',
+                    owns: ['frontend-replicaset'],
+                    uses: ['app-config'],
+                    yaml: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend-deployment
+  namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+      - name: frontend
+        image: nginx:1.21
+        ports:
+        - containerPort: 3000
+        envFrom:
+        - configMapRef:
+            name: app-config`
+                },
+                'api-deployment': {
+                    type: 'Deployment',
+                    name: 'api-deployment',
+                    namespace: 'default',
+                    health: 'healthy',
+                    owns: ['api-replicaset'],
+                    uses: ['app-config', 'db-secret', 'api-secret'],
+                    yaml: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: api-deployment
+  namespace: default
+spec:
+  replicas: 4
+  selector:
+    matchLabels:
+      app: api
+  template:
+    metadata:
+      labels:
+        app: api
+    spec:
+      containers:
+      - name: api
+        image: myapi:v2.1
+        ports:
+        - containerPort: 8080
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: db-secret
+        - secretRef:
+            name: api-secret`
+                },
+                'admin-deployment': {
+                    type: 'Deployment',
+                    name: 'admin-deployment',
+                    namespace: 'default',
+                    health: 'warning',
+                    owns: ['admin-replicaset'],
+                    uses: ['app-config', 'db-secret'],
+                    yaml: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: admin-deployment
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: admin
+  template:
+    metadata:
+      labels:
+        app: admin
+    spec:
+      containers:
+      - name: admin
+        image: admin-panel:v1.5
+        ports:
+        - containerPort: 3000
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: db-secret`
+                },
+                'database-deployment': {
+                    type: 'Deployment',
+                    name: 'database-deployment',
+                    namespace: 'default',
+                    health: 'healthy',
+                    owns: ['database-replicaset'],
+                    uses: ['db-secret'],
+                    yaml: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: database-deployment
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:14
+        ports:
+        - containerPort: 5432
+        envFrom:
+        - secretRef:
+            name: db-secret`
+                },
+                'redis-deployment': {
+                    type: 'Deployment',
+                    name: 'redis-deployment',
+                    namespace: 'default',
+                    health: 'healthy',
+                    owns: ['redis-replicaset'],
+                    yaml: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis-deployment
+  namespace: default
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7-alpine
+        ports:
+        - containerPort: 6379`
+                },
+                'worker-deployment': {
+                    type: 'Deployment',
+                    name: 'worker-deployment',
+                    namespace: 'default',
+                    health: 'healthy',
+                    owns: ['worker-replicaset'],
+                    uses: ['app-config', 'db-secret'],
+                    yaml: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: worker-deployment
+  namespace: default
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: worker
+  template:
+    metadata:
+      labels:
+        app: worker
+    spec:
+      containers:
+      - name: worker
+        image: worker:v1.2
+        envFrom:
+        - configMapRef:
+            name: app-config
+        - secretRef:
+            name: db-secret`
+                },
+                'elasticsearch-deployment': {
+                    type: 'Deployment',
+                    name: 'elasticsearch-deployment',
+                    namespace: 'logging',
+                    health: 'error',
+                    owns: ['elasticsearch-replicaset'],
+                    yaml: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: elasticsearch-deployment
+  namespace: logging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: elasticsearch
+  template:
+    metadata:
+      labels:
+        app: elasticsearch
+    spec:
+      containers:
+      - name: elasticsearch
+        image: elasticsearch:8.5.0
+        ports:
+        - containerPort: 9200`
+                },
+                'kibana-deployment': {
+                    type: 'Deployment',
+                    name: 'kibana-deployment',
+                    namespace: 'logging',
+                    health: 'healthy',
+                    owns: ['kibana-replicaset'],
+                    yaml: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kibana-deployment
+  namespace: logging
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kibana
+  template:
+    metadata:
+      labels:
+        app: kibana
+    spec:
+      containers:
+      - name: kibana
+        image: kibana:8.5.0
+        ports:
+        - containerPort: 5601`
+                },
+                'prometheus-deployment': {
+                    type: 'Deployment',
+                    name: 'prometheus-deployment',
+                    namespace: 'monitoring',
+                    health: 'healthy',
+                    owns: ['prometheus-replicaset'],
+                    uses: ['prometheus-config'],
+                    yaml: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: prometheus-deployment
+  namespace: monitoring
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: prometheus
+  template:
+    metadata:
+      labels:
+        app: prometheus
+    spec:
+      containers:
+      - name: prometheus
+        image: prom/prometheus:v2.40.0
+        ports:
+        - containerPort: 9090
+        volumeMounts:
+        - name: config
+          mountPath: /etc/prometheus
+      volumes:
+      - name: config
+        configMap:
+          name: prometheus-config`
+                },
+                'grafana-deployment': {
+                    type: 'Deployment',
+                    name: 'grafana-deployment',
+                    namespace: 'monitoring',
+                    health: 'healthy',
+                    owns: ['grafana-replicaset'],
+                    yaml: `apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: grafana-deployment
+  namespace: monitoring
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: grafana/grafana:9.3.0
+        ports:
+        - containerPort: 3000`
+                }
+            },
+            replicasets: {
+                'frontend-replicaset': {
+                    type: 'ReplicaSet',
+                    name: 'frontend-replicaset',
+                    namespace: 'default',
+                    health: 'healthy',
+                    ownedBy: ['frontend-deployment'],
+                    owns: ['frontend-deployment-pod-1', 'frontend-deployment-pod-2', 'frontend-deployment-pod-3'],
+                    yaml: `apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: frontend-replicaset
+  namespace: default
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: frontend-deployment
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: frontend`
+                },
+                'api-replicaset': {
+                    type: 'ReplicaSet',
+                    name: 'api-replicaset',
+                    namespace: 'default',
+                    health: 'healthy',
+                    ownedBy: ['api-deployment'],
+                    owns: ['api-deployment-pod-1', 'api-deployment-pod-2', 'api-deployment-pod-3', 'api-deployment-pod-4'],
+                    yaml: `apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: api-replicaset
+  namespace: default
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: api-deployment
+spec:
+  replicas: 4`
+                },
+                'admin-replicaset': {
+                    type: 'ReplicaSet',
+                    name: 'admin-replicaset',
+                    namespace: 'default',
+                    health: 'warning',
+                    ownedBy: ['admin-deployment'],
+                    owns: ['admin-deployment-pod-1', 'admin-deployment-pod-2'],
+                    yaml: `apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: admin-replicaset
+  namespace: default
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: admin-deployment
+spec:
+  replicas: 2`
+                },
+                'database-replicaset': {
+                    type: 'ReplicaSet',
+                    name: 'database-replicaset',
+                    namespace: 'default',
+                    health: 'healthy',
+                    ownedBy: ['database-deployment'],
+                    owns: ['database-deployment-pod-1'],
+                    yaml: `apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: database-replicaset
+  namespace: default
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: database-deployment
+spec:
+  replicas: 1`
+                },
+                'redis-replicaset': {
+                    type: 'ReplicaSet',
+                    name: 'redis-replicaset',
+                    namespace: 'default',
+                    health: 'healthy',
+                    ownedBy: ['redis-deployment'],
+                    owns: ['redis-deployment-pod-1', 'redis-deployment-pod-2'],
+                    yaml: `apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: redis-replicaset
+  namespace: default
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: redis-deployment
+spec:
+  replicas: 2`
+                },
+                'worker-replicaset': {
+                    type: 'ReplicaSet',
+                    name: 'worker-replicaset',
+                    namespace: 'default',
+                    health: 'healthy',
+                    ownedBy: ['worker-deployment'],
+                    owns: ['worker-deployment-pod-1', 'worker-deployment-pod-2', 'worker-deployment-pod-3'],
+                    yaml: `apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: worker-replicaset
+  namespace: default
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: worker-deployment
+spec:
+  replicas: 3`
+                },
+                'elasticsearch-replicaset': {
+                    type: 'ReplicaSet',
+                    name: 'elasticsearch-replicaset',
+                    namespace: 'logging',
+                    health: 'error',
+                    ownedBy: ['elasticsearch-deployment'],
+                    owns: ['elasticsearch-deployment-pod-1'],
+                    yaml: `apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: elasticsearch-replicaset
+  namespace: logging
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: elasticsearch-deployment
+spec:
+  replicas: 1`
+                },
+                'kibana-replicaset': {
+                    type: 'ReplicaSet',
+                    name: 'kibana-replicaset',
+                    namespace: 'logging',
+                    health: 'healthy',
+                    ownedBy: ['kibana-deployment'],
+                    owns: ['kibana-deployment-pod-1'],
+                    yaml: `apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: kibana-replicaset
+  namespace: logging
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: kibana-deployment
+spec:
+  replicas: 1`
+                },
+                'prometheus-replicaset': {
+                    type: 'ReplicaSet',
+                    name: 'prometheus-replicaset',
+                    namespace: 'monitoring',
+                    health: 'healthy',
+                    ownedBy: ['prometheus-deployment'],
+                    owns: ['prometheus-deployment-pod-1'],
+                    yaml: `apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: prometheus-replicaset
+  namespace: monitoring
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: prometheus-deployment
+spec:
+  replicas: 1`
+                },
+                'grafana-replicaset': {
+                    type: 'ReplicaSet',
+                    name: 'grafana-replicaset',
+                    namespace: 'monitoring',
+                    health: 'healthy',
+                    ownedBy: ['grafana-deployment'],
+                    owns: ['grafana-deployment-pod-1', 'grafana-deployment-pod-2'],
+                    yaml: `apiVersion: apps/v1
+kind: ReplicaSet
+metadata:
+  name: grafana-replicaset
+  namespace: monitoring
+  ownerReferences:
+  - apiVersion: apps/v1
+    kind: Deployment
+    name: grafana-deployment
+spec:
+  replicas: 2`
+                }
+            },
+            pods: {},
+            configmaps: {
+                'app-config': {
+                    type: 'ConfigMap',
+                    name: 'app-config',
+                    namespace: 'default',
+                    health: 'healthy',
+                    usedBy: ['frontend-deployment-pod-1', 'frontend-deployment-pod-2', 'frontend-deployment-pod-3', 'api-deployment-pod-1', 'api-deployment-pod-2', 'api-deployment-pod-3', 'api-deployment-pod-4', 'admin-deployment-pod-1', 'admin-deployment-pod-2', 'worker-deployment-pod-1', 'worker-deployment-pod-2', 'worker-deployment-pod-3'],
+                    yaml: `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: app-config
+  namespace: default
+data:
+  API_URL: "https://api.example.com"
+  LOG_LEVEL: "info"
+  TIMEOUT: "30s"
+  REDIS_HOST: "redis-service"
+  DATABASE_HOST: "database-service"`
+                },
+                'prometheus-config': {
+                    type: 'ConfigMap',
+                    name: 'prometheus-config',
+                    namespace: 'monitoring',
+                    health: 'healthy',
+                    usedBy: ['prometheus-deployment-pod-1'],
+                    yaml: `apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+  namespace: monitoring
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+    scrape_configs:
+      - job_name: 'kubernetes-pods'
+        kubernetes_sd_configs:
+        - role: pod`
+                }
+            },
+            secrets: {
+                'db-secret': {
+                    type: 'Secret',
+                    name: 'db-secret',
+                    namespace: 'default',
+                    health: 'healthy',
+                    usedBy: ['api-deployment-pod-1', 'api-deployment-pod-2', 'api-deployment-pod-3', 'api-deployment-pod-4', 'admin-deployment-pod-1', 'admin-deployment-pod-2', 'database-deployment-pod-1', 'worker-deployment-pod-1', 'worker-deployment-pod-2', 'worker-deployment-pod-3'],
+                    yaml: `apiVersion: v1
+kind: Secret
+metadata:
+  name: db-secret
+  namespace: default
+type: Opaque
+data:
+  username: cG9zdGdyZXM=
+  password: c3VwZXJzZWNyZXRwYXNzd29yZA==
+  database: bXlhcHA=`
+                },
+                'api-secret': {
+                    type: 'Secret',
+                    name: 'api-secret',
+                    namespace: 'default',
+                    health: 'healthy',
+                    usedBy: ['api-deployment-pod-1', 'api-deployment-pod-2', 'api-deployment-pod-3', 'api-deployment-pod-4'],
+                    yaml: `apiVersion: v1
+kind: Secret
+metadata:
+  name: api-secret
+  namespace: default
+type: Opaque
+data:
+  jwt_secret: c29tZS1yYW5kb20tc2VjcmV0LWtleQ==
+  api_key: YXBpLWtleS1mb3ItZXh0ZXJuYWwtc2VydmljZQ==`
+                }
+            }
+        };
+
+        // Generate pods dynamically
+        const podConfigs = [
+            { deployment: 'frontend', namespace: 'default', count: 3, health: ['healthy', 'healthy', 'healthy'] },
+            { deployment: 'api', namespace: 'default', count: 4, health: ['healthy', 'healthy', 'warning', 'healthy'] },
+            { deployment: 'admin', namespace: 'default', count: 2, health: ['healthy', 'warning'] },
+            { deployment: 'database', namespace: 'default', count: 1, health: ['healthy'] },
+            { deployment: 'redis', namespace: 'default', count: 2, health: ['healthy', 'healthy'] },
+            { deployment: 'worker', namespace: 'default', count: 3, health: ['healthy', 'healthy', 'healthy'] },
+            { deployment: 'elasticsearch', namespace: 'logging', count: 1, health: ['error'] },
+            { deployment: 'kibana', namespace: 'logging', count: 1, health: ['healthy'] },
+            { deployment: 'prometheus', namespace: 'monitoring', count: 1, health: ['healthy'] },
+            { deployment: 'grafana', namespace: 'monitoring', count: 2, health: ['healthy', 'healthy'] }
+        ];
+
+        podConfigs.forEach(config => {
+            for (let i = 1; i <= config.count; i++) {
+                const podName = `${config.deployment}-deployment-pod-${i}`;
+                const health = config.health[i - 1];
+                
+                const pod = {
+                    type: 'Pod',
+                    name: podName,
+                    namespace: config.namespace,
+                    health: health,
+                    ownedBy: [`${config.deployment}-replicaset`],
+                    exposedBy: [`${config.deployment}-service`],
+                    yaml: `apiVersion: v1
+kind: Pod
+metadata:
+  name: ${podName}
+  namespace: ${config.namespace}
+  labels:
+    app: ${config.deployment}
+spec:
+  containers:
+  - name: ${config.deployment}
+    image: ${config.deployment}:latest
+    ports:
+    - containerPort: 8080${health === 'error' ? `
+status:
+  phase: CrashLoopBackOff
+  containerStatuses:
+  - restartCount: 5
+    state:
+      waiting:
+        reason: CrashLoopBackOff` : health === 'warning' ? `
+status:
+  conditions:
+  - type: Ready
+    status: "True"
+    message: "High memory usage: 85%"` : ''}`
+                };
+
+                // Add uses relationship for pods that use configs/secrets
+                if (['frontend', 'api', 'admin', 'worker'].includes(config.deployment)) {
+                    pod.uses = ['app-config'];
+                }
+                if (['api', 'admin', 'database', 'worker'].includes(config.deployment)) {
+                    if (!pod.uses) pod.uses = [];
+                    pod.uses.push('db-secret');
+                }
+                if (config.deployment === 'api') {
+                    pod.uses.push('api-secret');
+                }
+                if (config.deployment === 'prometheus') {
+                    pod.uses = ['prometheus-config'];
+                }
+
+                k8sData.pods[podName] = pod;
+            }
+        });
+
+        let selectedNode = null;
+        let currentTab = 'overview';
+        let currentFilter = 'all';
+        let currentView = 'dashboard';
+        let currentResource = null;
+
+        // Resource type icons
+        const resourceIcons = {
+            'Pod': '◆',
+            'Deployment': '▣',
+            'Service': '◉',
+            'Ingress': '⬡',
+            'ReplicaSet': '▤',
+            'ConfigMap': '◫',
+            'Secret': '◪'
+        };
+
+        function copyYamlToClipboard() {
+            if (!currentResource) return;
+            
+            const btn = event.target.closest('.copy-btn');
+            navigator.clipboard.writeText(currentResource.yaml).then(() => {
+                btn.classList.add('copied');
+                const originalText = btn.innerHTML;
+                btn.innerHTML = '<span>✓</span> Copied!';
+                
+                setTimeout(() => {
+                    btn.classList.remove('copied');
+                    btn.innerHTML = originalText;
+                }, 2000);
+            }).catch(err => {
+                console.error('Failed to copy:', err);
+            });
+        }
+
+        function switchView(view) {
+            currentView = view;
+            const sidebar = document.getElementById('sidebar');
+            const canvas = document.getElementById('canvasContainer');
+            const navTabs = document.querySelectorAll('.nav-tab');
+
+            // Update nav tab active state
+            navTabs.forEach((tab, index) => {
+                tab.classList.remove('active');
+                if ((view === 'dashboard' && index === 0) || (view === 'topology' && index === 1)) {
+                    tab.classList.add('active');
+                }
+            });
+
+            if (view === 'dashboard') {
+                sidebar.classList.remove('compact');
+                canvas.classList.remove('visible');
+            } else if (view === 'topology') {
+                sidebar.classList.add('compact');
+                canvas.classList.add('visible');
+
+                // Initialize Mermaid diagram if not already done
+                const mermaidContainer = document.getElementById('mermaidDiagram');
+                if (mermaidContainer && !mermaidContainer.hasChildNodes()) {
+                    initMermaid();
+                }
+
+                // Initialize drag and pan
+                initDragAndPan();
+            }
+        }
+
+        function updateFilterCounts() {
+            // Count resources by type
+            const counts = {
+                all: 0,
+                pod: 0,
+                deployment: 0,
+                service: 0,
+                ingress: 0,
+                replicaset: 0,
+                configmap: 0,
+                secret: 0
+            };
+
+            Object.values(k8sData).forEach(category => {
+                Object.values(category).forEach(resource => {
+                    counts.all++;
+                    const type = resource.type.toLowerCase();
+                    if (counts[type] !== undefined) {
+                        counts[type]++;
+                    }
+                });
+            });
+
+            // Update filter button text
+            const filterButtons = document.querySelectorAll('.filter-btn');
+            filterButtons[0].textContent = `All (${counts.all})`;
+            filterButtons[1].textContent = `Pods (${counts.pod})`;
+            filterButtons[2].textContent = `Deployments (${counts.deployment})`;
+            filterButtons[3].textContent = `Services (${counts.service})`;
+            filterButtons[4].textContent = `Ingress (${counts.ingress})`;
+            filterButtons[5].textContent = `ReplicaSets (${counts.replicaset})`;
+            filterButtons[6].textContent = `ConfigMaps (${counts.configmap})`;
+            filterButtons[7].textContent = `Secrets (${counts.secret})`;
+        }
+
+        function generateMermaidDiagram() {
+            let mermaidCode = 'graph TB\n';
+
+            // Define node styles based on resource type
+            const nodeStyles = {
+                'Ingress': ':::ingressStyle',
+                'Service': ':::serviceStyle',
+                'Deployment': ':::deploymentStyle',
+                'ReplicaSet': ':::replicasetStyle',
+                'Pod': ':::podStyle',
+                'ConfigMap': ':::configStyle',
+                'Secret': ':::secretStyle'
+            };
+
+            // Add all nodes with sanitized IDs and icons
+            const allResources = [];
+            Object.values(k8sData).forEach(category => {
+                Object.values(category).forEach(resource => {
+                    allResources.push(resource);
+                    const nodeId = resource.name.replace(/-/g, '_');
+
+                    // Get resource type icon
+                    const typeIcon = resourceIcons[resource.type] || '●';
+
+                    // Get health status icon
+                    const healthIcon = resource.health === 'healthy' ? '✓' :
+                                      resource.health === 'warning' ? '⚠' : '✗';
+
+                    // Build label with icon, type, name, and status
+                    const label = `${typeIcon} ${resource.type}#nbsp;#nbsp;${resource.name}#nbsp;${healthIcon}`;
+                    mermaidCode += `    ${nodeId}["${label}"]${nodeStyles[resource.type] || ''}\n`;
+                });
+            });
+
+            // Add connections
+            // Ingress -> Service
+            Object.values(k8sData.ingress).forEach(ingress => {
+                if (ingress.routes) {
+                    ingress.routes.forEach(target => {
+                        const fromId = ingress.name.replace(/-/g, '_');
+                        const toId = target.replace(/-/g, '_');
+                        mermaidCode += `    ${fromId} --> ${toId}\n`;
+                    });
+                }
+            });
+
+            // Service -> Pods
+            Object.values(k8sData.services).forEach(service => {
+                if (service.exposes) {
+                    service.exposes.forEach(target => {
+                        const fromId = service.name.replace(/-/g, '_');
+                        const toId = target.replace(/-/g, '_');
+                        mermaidCode += `    ${fromId} --> ${toId}\n`;
+                    });
+                }
+            });
+
+            // Deployment -> ReplicaSet
+            Object.values(k8sData.deployments).forEach(deployment => {
+                if (deployment.owns) {
+                    deployment.owns.forEach(target => {
+                        const fromId = deployment.name.replace(/-/g, '_');
+                        const toId = target.replace(/-/g, '_');
+                        mermaidCode += `    ${fromId} --> ${toId}\n`;
+                    });
+                }
+            });
+
+            // ReplicaSet -> Pods
+            Object.values(k8sData.replicasets).forEach(rs => {
+                if (rs.owns) {
+                    rs.owns.forEach(target => {
+                        const fromId = rs.name.replace(/-/g, '_');
+                        const toId = target.replace(/-/g, '_');
+                        mermaidCode += `    ${fromId} --> ${toId}\n`;
+                    });
+                }
+            });
+
+            // Pods -> ConfigMaps/Secrets
+            Object.values(k8sData.pods).forEach(pod => {
+                if (pod.uses) {
+                    pod.uses.forEach(target => {
+                        const fromId = pod.name.replace(/-/g, '_');
+                        const toId = target.replace(/-/g, '_');
+                        mermaidCode += `    ${fromId} --> ${toId}\n`;
+                    });
+                }
+            });
+
+            // Define styles matching dashboard resource cards
+            mermaidCode += '\n';
+            mermaidCode += '    classDef ingressStyle fill:#1a1308,stroke:#FF9800,stroke-width:2px,color:#FFB74D\n';
+            mermaidCode += '    classDef serviceStyle fill:#160a1a,stroke:#9C27B0,stroke-width:2px,color:#BA68C8\n';
+            mermaidCode += '    classDef deploymentStyle fill:#081219,stroke:#2196F3,stroke-width:2px,color:#64B5F6\n';
+            mermaidCode += '    classDef replicasetStyle fill:#081519,stroke:#00BCD4,stroke-width:2px,color:#4DD0E1\n';
+            mermaidCode += '    classDef podStyle fill:#0d1712,stroke:#4CAF50,stroke-width:2px,color:#81C784\n';
+            mermaidCode += '    classDef configStyle fill:#0f1214,stroke:#607D8B,stroke-width:2px,color:#90A4AE\n';
+            mermaidCode += '    classDef secretStyle fill:#130e0d,stroke:#795548,stroke-width:2px,color:#A1887F\n';
+
+            console.log('Generated Mermaid code:', mermaidCode);
+            return mermaidCode;
+        }
+
+        let mermaidRetryCount = 0;
+        async function initMermaid() {
+            if (window.mermaid) {
+                mermaidRetryCount = 0; // Reset retry count
+                // Configure Mermaid with dark theme matching dashboard
+                window.mermaid.initialize({
+                    startOnLoad: false,
+                    theme: 'dark',
+                    themeVariables: {
+                        darkMode: true,
+                        background: '#0a0a0a',
+                        mainBkg: '#121212',
+                        primaryColor: '#1a1f3a',
+                        primaryTextColor: '#e0e0e0',
+                        primaryBorderColor: '#1a1a1a',
+                        lineColor: '#667eea',
+                        secondaryColor: '#252035',
+                        tertiaryColor: '#2a2f1e',
+                        fontSize: '13px',
+                        fontFamily: 'Space Grotesk, sans-serif',
+                        edgeLabelBackground: '#1e1e1e',
+                        clusterBkg: '#0d0d0d',
+                        clusterBorder: '#141414',
+                        defaultLinkColor: '#667eea',
+                        titleColor: '#e0e0e0',
+                        nodeBorder: '#1a1a1a'
+                    },
+                    flowchart: {
+                        curve: 'basis',
+                        padding: 30,
+                        nodeSpacing: 120,
+                        rankSpacing: 180,
+                        useMaxWidth: false,
+                        htmlLabels: true,
+                        diagramPadding: 20
+                    }
+                });
+
+                // Generate and render the diagram
+                const mermaidCode = generateMermaidDiagram();
+                const container = document.getElementById('mermaidDiagram');
+
+                try {
+                    const { svg } = await window.mermaid.render('mermaidGraph', mermaidCode);
+                    container.innerHTML = svg;
+
+                    // Add click handlers to all nodes
+                    setTimeout(() => {
+                        const nodes = container.querySelectorAll('.node');
+                        console.log('Found nodes:', nodes.length);
+                        nodes.forEach(node => {
+                            node.style.cursor = 'pointer';
+                            node.addEventListener('click', (e) => {
+                                // Don't trigger click if user was dragging
+                                if (wasDragging) {
+                                    console.log('Click ignored - was dragging');
+                                    return;
+                                }
+
+                                e.stopPropagation();
+                                console.log('Node clicked:', node);
+
+                                // Try to get resource name from node ID first
+                                const nodeId = node.id;
+                                console.log('Node ID:', nodeId);
+
+                                if (nodeId && nodeId.startsWith('flowchart-')) {
+                                    // Extract the resource name from the Mermaid node ID
+                                    // Format is usually "flowchart-{sanitizedName}-{number}"
+                                    const idMatch = nodeId.match(/flowchart-(.+?)-\d+$/);
+                                    if (idMatch) {
+                                        const sanitizedName = idMatch[1];
+                                        // Convert back from underscore to hyphen
+                                        const resourceName = sanitizedName.replace(/_/g, '-');
+                                        console.log('Extracted resource name from ID:', resourceName);
+                                        const resource = findResource(resourceName);
+                                        if (resource) {
+                                            console.log('Found resource:', resource);
+                                            showDetails(resource);
+                                            return;
+                                        }
+                                    }
+                                }
+
+                                // Fallback: Extract resource name from the node's label
+                                let textElement = node.querySelector('.nodeLabel, .label, text');
+                                if (!textElement) {
+                                    textElement = node.querySelector('*');
+                                }
+
+                                if (textElement) {
+                                    let labelText = textElement.textContent || textElement.innerText;
+                                    console.log('Label text:', labelText);
+
+                                    // Remove all icons (type icons, health icons, and special chars)
+                                    labelText = labelText.replace(/[◆▣◉⬡▤◫◪●✓⚠✗]/g, '').trim();
+
+                                    // Extract name from "Type  name" format (after icon removal)
+                                    // The format is: Icon Type  Name Status
+                                    const parts = labelText.split(/\s{2,}/); // Split by 2 or more spaces
+                                    if (parts.length >= 2) {
+                                        const resourceType = parts[0].trim();
+                                        const resourceName = parts[1].trim();
+                                        console.log('Extracted resource name from label:', resourceName);
+                                        const resource = findResource(resourceName);
+                                        if (resource) {
+                                            console.log('Found resource:', resource);
+                                            showDetails(resource);
+                                        } else {
+                                            console.log('Resource not found for name:', resourceName);
+                                        }
+                                    } else {
+                                        console.log('Could not extract resource name from label format');
+                                    }
+                                } else {
+                                    console.log('No text element found in node');
+                                }
+                            });
+                        });
+
+                        // Add mouse wheel zoom support
+                        const canvasContainer = document.getElementById('canvasContainer');
+                        if (canvasContainer) {
+                            canvasContainer.addEventListener('wheel', (e) => {
+                                if (e.ctrlKey || e.metaKey) {
+                                    e.preventDefault();
+                                    if (e.deltaY < 0) {
+                                        zoomIn();
+                                    } else {
+                                        zoomOut();
+                                    }
+                                }
+                            }, { passive: false });
+                        }
+                    }, 100);
+                } catch (error) {
+                    console.error('Error rendering Mermaid diagram:', error);
+                    container.innerHTML = '<p style="color: #f44336; text-align: center; padding: 40px;">Error rendering diagram. Check console for details.</p>';
+                }
+            } else {
+                // Mermaid not loaded yet, try again after a delay
+                const container = document.getElementById('mermaidDiagram');
+                if (mermaidRetryCount < 5) {
+                    container.innerHTML = '<p style="color: #888; text-align: center; padding: 40px;">Loading diagram...</p>';
+                    mermaidRetryCount++;
+                    setTimeout(() => initMermaid(), 500);
+                } else {
+                    container.innerHTML = '<p style="color: #f44336; text-align: center; padding: 40px;">Failed to load Mermaid library. Please refresh the page.</p>';
+                }
+            }
+        }
+
+        let currentZoom = 1;
+        let panX = 0;
+        let panY = 0;
+        let isDragging = false;
+        let dragStartX = 0;
+        let dragStartY = 0;
+        let dragStartPanX = 0;
+        let dragStartPanY = 0;
+
+        function zoomIn() {
+            currentZoom = Math.min(currentZoom + 0.2, 3);
+            applyTransform();
+        }
+
+        function zoomOut() {
+            currentZoom = Math.max(currentZoom - 0.2, 0.5);
+            applyTransform();
+        }
+
+        function resetZoom() {
+            currentZoom = 1;
+            panX = 0;
+            panY = 0;
+            applyTransform();
+        }
+
+        function applyTransform() {
+            const canvas = document.getElementById('canvas');
+            if (canvas) {
+                canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${currentZoom})`;
+                canvas.style.transformOrigin = 'top left';
+            }
+
+            // Update zoom level display
+            const zoomLevel = document.getElementById('zoomLevel');
+            if (zoomLevel) {
+                zoomLevel.textContent = `${Math.round(currentZoom * 100)}%`;
+            }
+        }
+
+        let wasDragging = false;
+        let dragInitialized = false;
+        function initDragAndPan() {
+            if (dragInitialized) return; // Already initialized
+            dragInitialized = true;
+
+            const container = document.getElementById('canvasContainer');
+            if (!container) return;
+
+            let startX, startY;
+
+            container.addEventListener('mousedown', (e) => {
+                // Don't start drag if clicking on zoom controls
+                if (e.target.closest('.zoom-controls')) return;
+
+                isDragging = false;
+                wasDragging = false;
+                startX = e.clientX;
+                startY = e.clientY;
+                dragStartX = e.clientX;
+                dragStartY = e.clientY;
+                dragStartPanX = panX;
+                dragStartPanY = panY;
+            });
+
+            document.addEventListener('mousemove', (e) => {
+                if (startX === undefined) return;
+
+                const dx = e.clientX - dragStartX;
+                const dy = e.clientY - dragStartY;
+
+                // Only start dragging if moved more than 5 pixels
+                if (!isDragging && (Math.abs(dx) > 5 || Math.abs(dy) > 5)) {
+                    isDragging = true;
+                    wasDragging = true;
+                    container.classList.add('dragging');
+                }
+
+                if (isDragging) {
+                    panX = dragStartPanX + dx;
+                    panY = dragStartPanY + dy;
+                    applyTransform();
+                    e.preventDefault();
+                }
+            });
+
+            document.addEventListener('mouseup', (e) => {
+                if (isDragging) {
+                    isDragging = false;
+                    container.classList.remove('dragging');
+                }
+                startX = undefined;
+                startY = undefined;
+
+                // Reset wasDragging after a short delay to allow click events to check it
+                setTimeout(() => {
+                    wasDragging = false;
+                }, 10);
+            });
+        }
+
+        function init() {
+            updateStats();
+            updateFilterCounts();
+            updateResourceList('all');
+        }
+
+        function findResource(name) {
+            for (let category of Object.values(k8sData)) {
+                if (category[name]) return category[name];
+            }
+            return null;
+        }
+
+        function highlightYamlReferences(yamlText) {
+            // Get all resource names from k8sData
+            const allResourceNames = [];
+            Object.values(k8sData).forEach(category => {
+                Object.keys(category).forEach(name => {
+                    allResourceNames.push(name);
+                });
+            });
+
+            // Sort by length (longest first) to match longer names first
+            allResourceNames.sort((a, b) => b.length - a.length);
+
+            // First, escape all HTML
+            let processedYaml = yamlText
+                .replace(/&/g, '&amp;')
+                .replace(/</g, '&lt;')
+                .replace(/>/g, '&gt;');
+
+            // Now replace resource names with clickable spans
+            allResourceNames.forEach(resourceName => {
+                const resource = findResource(resourceName);
+                if (!resource) return;
+
+                // Escape the resource name for regex
+                const escapedName = escapeRegExp(resourceName);
+                
+                // Match resource names that appear as values (after : and whitespace)
+                const regex = new RegExp('(:\\s+)(' + escapedName + ')(?=\\s|$)', 'gm');
+                
+                // Create the span with proper escaping
+                const safeResourceName = resourceName.replace(/'/g, '&#39;');
+                const safeType = resource.type.replace(/'/g, '&#39;');
+                
+                processedYaml = processedYaml.replace(regex, function(match, prefix, name) {
+                    return prefix + '<span class="yaml-link" onclick="navigateFromYaml(\'' + safeResourceName + '\');" title="Click to view ' + safeType + '">' + name + '</span>';
+                });
+            });
+
+            return processedYaml;
+        }
+
+        function escapeRegExp(string) {
+            return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        }
+
+        function navigateFromYaml(resourceName) {
+            const resource = findResource(resourceName);
+            if (resource) {
+                // Add a brief transition effect
+                const panel = document.getElementById('detailPanel');
+                panel.style.opacity = '0.7';
+                panel.style.transform = 'translate(-50%, -50%) scale(0.98)';
+                
+                setTimeout(() => {
+                    showDetails(resource);
+                    // Switch to overview tab when navigating
+                    switchTab('overview');
+                    panel.style.opacity = '1';
+                    panel.style.transform = 'translate(-50%, -50%) scale(1)';
+                }, 150);
+            }
+        }
+
+        function showDetails(resource) {
+            currentResource = resource;
+            const panel = document.getElementById('detailPanel');
+            const overlay = document.getElementById('detailOverlay');
+            panel.classList.add('visible');
+            overlay.classList.add('visible');
+
+            document.getElementById('detailType').textContent = resource.type;
+            document.getElementById('detailTitle').textContent = resource.name;
+
+            // Remove previous selection
+            if (selectedNode) {
+                selectedNode.classList.remove('selected');
+            }
+
+            // Add selection to new node
+            const node = document.querySelector(`[data-resource="${resource.name}"]`);
+            if (node) {
+                node.classList.add('selected');
+                selectedNode = node;
+            }
+
+            updateDetailContent(resource);
+        }
+
+        function updateDetailContent(resource) {
+            // Health Status
+            const healthStatus = document.getElementById('healthStatus');
+            const healthIcon = resource.health === 'healthy' ? '✓' : 
+                               resource.health === 'warning' ? '⚠' : '✕';
+            const healthText = resource.health === 'healthy' ? 'Healthy' :
+                              resource.health === 'warning' ? 'Warning' : 'Error';
+            
+            healthStatus.innerHTML = `
+                <div class="health-icon ${resource.health}">${healthIcon}</div>
+                <div class="health-info">
+                    <div class="health-label">Status</div>
+                    <div class="health-value">${healthText}</div>
+                </div>
+            `;
+
+            // Overview
+            const overviewContent = document.getElementById('overviewContent');
+            
+            // Count relationships
+            let relationshipsCount = 0;
+            ['ownedBy', 'owns', 'exposes', 'exposedBy', 'routes', 'routedBy', 'uses', 'usedBy'].forEach(rel => {
+                if (resource[rel] && resource[rel].length > 0) {
+                    relationshipsCount += resource[rel].length;
+                }
+            });
+            
+            overviewContent.innerHTML = `
+                <div style="font-size: 13px; line-height: 1.8;">
+                    <p><strong>Name:</strong> ${resource.name}</p>
+                    <p><strong>Namespace:</strong> ${resource.namespace}</p>
+                    <p><strong>Type:</strong> ${resource.type}</p>
+                    ${resource.health === 'error' ? '<p style="color: #f44336;"><strong>Issue:</strong> CrashLoopBackOff detected</p>' : ''}
+                    ${resource.health === 'warning' ? '<p style="color: #FFC107;"><strong>Warning:</strong> High resource usage</p>' : ''}
+                    ${relationshipsCount > 0 ? `
+                        <div style="margin-top: 20px; padding: 16px; background: rgba(196, 245, 97, 0.1); border-radius: 12px; border-left: 3px solid #C4F561;">
+                            <strong style="color: #C4F561;">🔗 ${relationshipsCount} Connected Resources</strong>
+                            <p style="margin-top: 8px; color: #aaa; font-size: 12px;">This resource is connected to ${relationshipsCount} other resource${relationshipsCount > 1 ? 's' : ''} in the cluster. View the Relationships tab for details.</p>
+                        </div>
+                    ` : ''}
+                </div>
+            `;
+
+            // YAML
+            const highlightedYaml = highlightYamlReferences(resource.yaml);
+            document.getElementById('yamlContent').innerHTML = highlightedYaml;
+
+            // Relationships
+            const relationshipsContent = document.getElementById('relationshipsContent');
+            let html = '';
+            let totalRelationships = 0;
+
+            if (resource.ownedBy && resource.ownedBy.length > 0) {
+                totalRelationships += resource.ownedBy.length;
+                html += '<div class="relationship-section"><h3>Owned By</h3><div class="relationship-list">';
+                resource.ownedBy.forEach(name => {
+                    html += `<div class="relationship-item" onclick="navigateToResource('${name}')">
+                        <span>${name}</span>
+                        <span class="relationship-arrow">↑</span>
+                    </div>`;
+                });
+                html += '</div></div>';
+            }
+
+            if (resource.owns && resource.owns.length > 0) {
+                totalRelationships += resource.owns.length;
+                html += '<div class="relationship-section"><h3>Owns</h3><div class="relationship-list">';
+                resource.owns.forEach(name => {
+                    html += `<div class="relationship-item" onclick="navigateToResource('${name}')">
+                        <span>${name}</span>
+                        <span class="relationship-arrow">↓</span>
+                    </div>`;
+                });
+                html += '</div></div>';
+            }
+
+            if (resource.exposes && resource.exposes.length > 0) {
+                totalRelationships += resource.exposes.length;
+                html += '<div class="relationship-section"><h3>Exposes</h3><div class="relationship-list">';
+                resource.exposes.forEach(name => {
+                    html += `<div class="relationship-item" onclick="navigateToResource('${name}')">
+                        <span>${name}</span>
+                        <span class="relationship-arrow">→</span>
+                    </div>`;
+                });
+                html += '</div></div>';
+            }
+
+            if (resource.exposedBy && resource.exposedBy.length > 0) {
+                totalRelationships += resource.exposedBy.length;
+                html += '<div class="relationship-section"><h3>Exposed By</h3><div class="relationship-list">';
+                resource.exposedBy.forEach(name => {
+                    html += `<div class="relationship-item" onclick="navigateToResource('${name}')">
+                        <span>${name}</span>
+                        <span class="relationship-arrow">←</span>
+                    </div>`;
+                });
+                html += '</div></div>';
+            }
+
+            if (resource.routes && resource.routes.length > 0) {
+                totalRelationships += resource.routes.length;
+                html += '<div class="relationship-section"><h3>Routes To</h3><div class="relationship-list">';
+                resource.routes.forEach(name => {
+                    html += `<div class="relationship-item" onclick="navigateToResource('${name}')">
+                        <span>${name}</span>
+                        <span class="relationship-arrow">→</span>
+                    </div>`;
+                });
+                html += '</div></div>';
+            }
+
+            if (resource.routedBy && resource.routedBy.length > 0) {
+                totalRelationships += resource.routedBy.length;
+                html += '<div class="relationship-section"><h3>Routed By</h3><div class="relationship-list">';
+                resource.routedBy.forEach(name => {
+                    html += `<div class="relationship-item" onclick="navigateToResource('${name}')">
+                        <span>${name}</span>
+                        <span class="relationship-arrow">←</span>
+                    </div>`;
+                });
+                html += '</div></div>';
+            }
+
+            if (resource.uses && resource.uses.length > 0) {
+                totalRelationships += resource.uses.length;
+                html += '<div class="relationship-section"><h3>Uses</h3><div class="relationship-list">';
+                resource.uses.forEach(name => {
+                    html += `<div class="relationship-item" onclick="navigateToResource('${name}')">
+                        <span>${name}</span>
+                        <span class="relationship-arrow">→</span>
+                    </div>`;
+                });
+                html += '</div></div>';
+            }
+
+            if (resource.usedBy && resource.usedBy.length > 0) {
+                totalRelationships += resource.usedBy.length;
+                html += '<div class="relationship-section"><h3>Used By</h3><div class="relationship-list">';
+                resource.usedBy.forEach(name => {
+                    html += `<div class="relationship-item" onclick="navigateToResource('${name}')">
+                        <span>${name}</span>
+                        <span class="relationship-arrow">←</span>
+                    </div>`;
+                });
+                html += '</div></div>';
+            }
+
+            relationshipsContent.innerHTML = html || '<p style="color: #666;">No relationships found</p>';
+            
+            // Update relationship badge
+            document.getElementById('relationshipBadge').textContent = totalRelationships;
+        }
+
+        function navigateToResource(name) {
+            const resource = findResource(name);
+            if (resource) {
+                showDetails(resource);
+            }
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            
+            // Find and activate the correct tab
+            const tabs = document.querySelectorAll('.tab');
+            if (tab === 'overview') tabs[0].classList.add('active');
+            else if (tab === 'yaml') tabs[1].classList.add('active');
+            else if (tab === 'relationships') tabs[2].classList.add('active');
+
+            // Update tab content
+            document.getElementById('overviewTab').style.display = tab === 'overview' ? 'block' : 'none';
+            document.getElementById('yamlTab').style.display = tab === 'yaml' ? 'block' : 'none';
+            document.getElementById('relationshipsTab').style.display = tab === 'relationships' ? 'block' : 'none';
+        }
+
+        function closeDetailPanel() {
+            document.getElementById('detailPanel').classList.remove('visible');
+            document.getElementById('detailOverlay').classList.remove('visible');
+            currentResource = null;
+            if (selectedNode) {
+                selectedNode.classList.remove('selected');
+                selectedNode = null;
+            }
+        }
+
+        function updateStats() {
+            let healthy = 0;
+            let warning = 0;
+            let error = 0;
+            let total = 0;
+
+            Object.values(k8sData).forEach(category => {
+                Object.values(category).forEach(resource => {
+                    total++;
+                    if (resource.health === 'healthy') healthy++;
+                    else if (resource.health === 'warning') warning++;
+                    else if (resource.health === 'error') error++;
+                });
+            });
+
+            document.getElementById('healthyCount').textContent = healthy;
+            document.getElementById('warningCount').textContent = warning;
+            document.getElementById('errorCount').textContent = error;
+            document.getElementById('totalCount').textContent = total;
+        }
+
+        function filterResources(type) {
+            currentFilter = type;
+
+            // Update active button
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Update resource list
+            updateResourceList(type);
+
+            // Update node visibility in Mermaid diagram
+            const mermaidSvg = document.querySelector('#mermaidDiagram svg');
+            if (mermaidSvg) {
+                const nodes = mermaidSvg.querySelectorAll('.node');
+                nodes.forEach(node => {
+                    const textElement = node.querySelector('.nodeLabel');
+                    if (textElement) {
+                        const labelText = textElement.textContent;
+                        const match = labelText.match(/^([^:]+):/);
+                        if (match) {
+                            const resourceType = match[1].trim().toLowerCase();
+
+                            if (type === 'all') {
+                                node.style.opacity = '1';
+                                node.style.pointerEvents = 'auto';
+                            } else if (resourceType === type ||
+                                      (type === 'config' && (resourceType === 'configmap' || resourceType === 'secret'))) {
+                                node.style.opacity = '1';
+                                node.style.pointerEvents = 'auto';
+                            } else {
+                                node.style.opacity = '0.2';
+                                node.style.pointerEvents = 'none';
+                            }
+                        }
+                    }
+                });
+            }
+
+            // Keep counts updated
+            updateFilterCounts();
+        }
+
+        function updateResourceList(type) {
+            const listContainer = document.getElementById('resourceList');
+            let resources = [];
+            
+            // Collect all resources of the specified type
+            Object.values(k8sData).forEach(category => {
+                Object.values(category).forEach(resource => {
+                    if (type === 'all' || resource.type.toLowerCase() === type) {
+                        resources.push(resource);
+                    }
+                });
+            });
+            
+            // Sort by name
+            resources.sort((a, b) => a.name.localeCompare(b.name));
+            
+            // Generate compact list HTML
+            let html = '';
+            resources.forEach(resource => {
+                const icon = resourceIcons[resource.type] || '◆';
+                
+                html += `
+                    <div class="resource-item ${resource.type.toLowerCase()}" onclick="showDetailsFromList('${resource.name}')">
+                        <div class="resource-header">
+                            <div class="resource-icon ${resource.type.toLowerCase()}">${icon}</div>
+                            <div class="resource-info">
+                                <div class="resource-name">${resource.name}</div>
+                                <div class="resource-subtitle">${resource.namespace} · ${resource.type}</div>
+                            </div>
+                        </div>
+                        <div class="resource-status ${resource.health}"></div>
+                    </div>
+                `;
+            });
+            
+            listContainer.innerHTML = html || '<p style="color: #666; padding: 20px; text-align: center;">No resources found</p>';
+        }
+
+        function showDetailsFromList(name) {
+            const resource = findResource(name);
+            if (resource) {
+                showDetails(resource);
+                
+                // Scroll the node into focus if in topology view
+                if (currentView === 'topology') {
+                    const node = document.querySelector(`[data-resource="${name}"]`);
+                    if (node && node.style.opacity !== '0.2') {
+                        node.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    }
+                }
+            }
+        }
+
+        // Initialize the visualization
+        init();
+    </script>
+</body>
+</html>
