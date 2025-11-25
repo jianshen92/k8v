@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>K8s POC - Streaming Resources</title>
+</head>
+<body>
+    <h1>Kubernetes Resources (Live)</h1>
+    <p>Connected to cluster. Watching for changes...</p>
+
+    <table border="1" cellpadding="8" cellspacing="0">
+        <thead>
+            <tr>
+                <th>Type</th>
+                <th>Namespace</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Last Event</th>
+            </tr>
+        </thead>
+        <tbody id="resources">
+        </tbody>
+    </table>
+
+    <script>
+        const ws = new WebSocket('ws://localhost:8080/ws');
+        const tbody = document.getElementById('resources');
+
+        ws.onopen = () => {
+            console.log('WebSocket connected');
+        };
+
+        ws.onmessage = (event) => {
+            const data = JSON.parse(event.data);
+            console.log('Received:', data);
+
+            // Create unique row ID
+            const rowId = `${data.resourceType}-${data.namespace}-${data.name}`;
+            let row = document.getElementById(rowId);
+
+            if (data.type === 'DELETED') {
+                // Remove row if resource deleted
+                if (row) {
+                    row.remove();
+                    console.log('Removed row:', rowId);
+                }
+            } else {
+                // Add or update row
+                if (!row) {
+                    row = tbody.insertRow();
+                    row.id = rowId;
+                    row.insertCell(0); // Type
+                    row.insertCell(1); // Namespace
+                    row.insertCell(2); // Name
+                    row.insertCell(3); // Status
+                    row.insertCell(4); // Event
+                    console.log('Created row:', rowId);
+                }
+
+                // Update cell values
+                row.cells[0].textContent = data.resourceType;
+                row.cells[1].textContent = data.namespace;
+                row.cells[2].textContent = data.name;
+                row.cells[3].textContent = data.status;
+                row.cells[4].textContent = data.type;
+
+                // Highlight on update
+                if (data.type === 'MODIFIED') {
+                    row.style.backgroundColor = '#ffffcc';
+                    setTimeout(() => {
+                        row.style.backgroundColor = '';
+                    }, 1000);
+                }
+            }
+        };
+
+        ws.onerror = (error) => {
+            console.error('WebSocket error:', error);
+            alert('WebSocket connection error. Check console for details.');
+        };
+
+        ws.onclose = () => {
+            console.log('WebSocket closed');
+            alert('Connection to server closed. Reload page to reconnect.');
+        };
+    </script>
+</body>
+</html>
