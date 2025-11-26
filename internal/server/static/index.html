@@ -44,10 +44,30 @@
 
     /* Filters */
     .resource-filter { grid-column: 1 / -1; }
+    .filter-label { grid-column: 1 / -1; font-family: 'Space Grotesk', sans-serif; font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1.2px; font-weight: 600; margin-bottom: 4px; }
     .filter-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
     .filter-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); color: #888; padding: 10px 16px; border-radius: 12px; font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; transition: all 0.25s; min-width: 110px; }
     .filter-btn:hover:not(.active) { background: rgba(255,255,255,0.08); color: #fff; transform: translateY(-1px); }
     .filter-btn.active { background: #C4F561; border-color: #C4F561; color: #000; box-shadow: 0 8px 20px rgba(196,245,97,0.3); }
+
+    /* Namespace Dropdown */
+    .namespace-dropdown { position: relative; margin-top: 8px; }
+    .dropdown-selected { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); color: #fff; padding: 10px 16px; border-radius: 12px; font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; transition: all 0.25s; display: flex; align-items: center; justify-content: space-between; }
+    .dropdown-selected::after { content: '▼'; font-size: 10px; margin-left: 8px; transition: transform 0.25s; }
+    .dropdown-selected.open::after { transform: rotate(180deg); }
+    .dropdown-selected:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.12); }
+    .dropdown-menu { position: absolute; top: calc(100% + 4px); left: 0; right: 0; background: rgba(20,20,30,0.98); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 8px; z-index: 1000; box-shadow: 0 8px 32px rgba(0,0,0,0.4); max-height: 300px; overflow: hidden; display: flex; flex-direction: column; }
+    .dropdown-search { width: 100%; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); color: #fff; padding: 8px 12px; border-radius: 8px; font-family: 'Space Grotesk', sans-serif; font-size: 13px; margin-bottom: 8px; outline: none; }
+    .dropdown-search:focus { background: rgba(255,255,255,0.08); border-color: #C4F561; }
+    .dropdown-search::placeholder { color: #666; }
+    .dropdown-options { overflow-y: auto; max-height: 240px; }
+    .dropdown-options::-webkit-scrollbar { width: 6px; }
+    .dropdown-options::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
+    .dropdown-options::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+    .dropdown-option { padding: 10px 12px; border-radius: 8px; cursor: pointer; transition: all 0.2s; font-family: 'Space Grotesk', sans-serif; font-size: 13px; color: #888; }
+    .dropdown-option:hover { background: rgba(255,255,255,0.08); color: #fff; }
+    .dropdown-option.highlighted { background: rgba(196,245,97,0.15); color: #fff; border: 1px solid rgba(196,245,97,0.3); }
+    .dropdown-option.active { background: #C4F561; color: #000; font-weight: 600; }
 
     /* Resource list */
     .resource-list { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; margin-bottom: 20px; }
@@ -168,8 +188,21 @@
           <div class="stat-card"><div class="stat-label">Secrets</div><div class="stat-value" id="stat-secret">0</div></div>
         </div>
 
-        <!-- Filters -->
+        <!-- Namespace Filter -->
         <div class="resource-filter">
+          <div class="filter-label">Namespace</div>
+          <div class="namespace-dropdown">
+            <div class="dropdown-selected" id="namespace-selected">All Namespaces</div>
+            <div class="dropdown-menu" id="namespace-menu" style="display: none;">
+              <input type="text" class="dropdown-search" id="namespace-search" placeholder="Search namespaces...">
+              <div class="dropdown-options" id="namespace-options"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Resource Type Filters -->
+        <div class="resource-filter">
+          <div class="filter-label">Resource Type</div>
           <div class="filter-buttons" id="filters"></div>
         </div>
 
@@ -238,6 +271,9 @@
     let snapshotComplete = false;
     let snapshotCount = 0;
     let currentFilter = 'Pod';
+    let currentNamespace = localStorage.getItem('k8v-namespace') || 'all'; // namespace filter
+    let availableNamespaces = []; // fetched from API
+    let highlightedNamespaceIndex = -1; // for keyboard navigation
     const events = []; // recent update events
     const MAX_EVENTS = 100;
     const resourceTypes = ['Pod','Deployment','ReplicaSet','Service','Ingress','ConfigMap','Secret'];
@@ -245,14 +281,28 @@
     // ---------- WebSocket ----------
     function connect() {
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws`;
+      const nsParam = currentNamespace === 'all' ? '' : `?namespace=${currentNamespace}`;
+      const wsUrl = `${protocol}//${window.location.host}/ws${nsParam}`;
       ws = new WebSocket(wsUrl);
-      ws.onopen = () => { document.getElementById('connection-status').textContent = 'Connected'; snapshotComplete = false; snapshotCount = 0; };
+      ws.onopen = () => {
+        document.getElementById('connection-status').textContent = `Connected (${currentNamespace === 'all' ? 'All Namespaces' : currentNamespace})`;
+        snapshotComplete = false;
+        snapshotCount = 0;
+      };
       ws.onmessage = (event) => {
         const msg = JSON.parse(event.data);
         if (!snapshotComplete && msg.type === 'ADDED') {
           snapshotCount++; clearTimeout(window.snapshotTimer);
-          window.snapshotTimer = setTimeout(() => { if (!snapshotComplete) { snapshotComplete = true; } }, 900);
+          window.snapshotTimer = setTimeout(() => {
+            if (!snapshotComplete) {
+              snapshotComplete = true;
+              // Detect deleted namespace (snapshot complete but no resources)
+              if (snapshotCount === 0 && currentNamespace !== 'all') {
+                console.warn(`No resources found in namespace "${currentNamespace}", switching to "all"`);
+                setNamespace('all');
+              }
+            }
+          }, 900);
         }
         handleResourceEvent(msg);
       };
@@ -276,6 +326,174 @@
       currentFilter = type;
       renderFilters();
       renderResourceList();
+    }
+
+    // ---------- Namespace Filters ----------
+    async function fetchNamespaces() {
+      try {
+        const response = await fetch('/api/namespaces');
+        const data = await response.json();
+        availableNamespaces = ['all', ...data.namespaces];
+        renderNamespaceFilters();
+      } catch (err) {
+        console.error('Failed to fetch namespaces:', err);
+        availableNamespaces = ['all'];
+        renderNamespaceFilters();
+      }
+    }
+
+    function renderNamespaceFilters(searchTerm = '') {
+      const optionsContainer = document.getElementById('namespace-options');
+      const selectedDisplay = document.getElementById('namespace-selected');
+      if (!optionsContainer || !selectedDisplay) return;
+
+      // Update selected display
+      selectedDisplay.textContent = currentNamespace === 'all' ? 'All Namespaces' : currentNamespace;
+
+      // Filter namespaces based on search term
+      const filtered = availableNamespaces.filter(ns => {
+        const displayName = ns === 'all' ? 'All Namespaces' : ns;
+        return displayName.toLowerCase().includes(searchTerm.toLowerCase());
+      });
+
+      // Store filtered list for keyboard navigation
+      window.filteredNamespaces = filtered;
+
+      // Render filtered options
+      optionsContainer.innerHTML = '';
+      filtered.forEach((ns, index) => {
+        const option = document.createElement('div');
+        let className = 'dropdown-option';
+        if (currentNamespace === ns) className += ' active';
+        if (index === highlightedNamespaceIndex) className += ' highlighted';
+        option.className = className;
+        option.textContent = ns === 'all' ? 'All Namespaces' : ns;
+        option.setAttribute('data-index', index);
+        option.addEventListener('click', () => {
+          setNamespace(ns);
+          closeNamespaceDropdown();
+        });
+        optionsContainer.appendChild(option);
+      });
+    }
+
+    function toggleNamespaceDropdown() {
+      const menu = document.getElementById('namespace-menu');
+      const selected = document.getElementById('namespace-selected');
+      const search = document.getElementById('namespace-search');
+
+      if (menu.style.display === 'none') {
+        menu.style.display = 'flex';
+        selected.classList.add('open');
+        search.value = '';
+        highlightedNamespaceIndex = -1; // Reset keyboard navigation
+        search.focus();
+        renderNamespaceFilters('');
+      } else {
+        closeNamespaceDropdown();
+      }
+    }
+
+    function closeNamespaceDropdown() {
+      const menu = document.getElementById('namespace-menu');
+      const selected = document.getElementById('namespace-selected');
+      menu.style.display = 'none';
+      selected.classList.remove('open');
+      highlightedNamespaceIndex = -1; // Reset keyboard navigation
+    }
+
+    function filterNamespaceOptions() {
+      const search = document.getElementById('namespace-search');
+      highlightedNamespaceIndex = -1; // Reset on search
+      renderNamespaceFilters(search.value);
+    }
+
+    function handleNamespaceKeyboard(e) {
+      const menu = document.getElementById('namespace-menu');
+      if (menu.style.display === 'none') return;
+
+      const filtered = window.filteredNamespaces || [];
+      if (filtered.length === 0) return;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        highlightedNamespaceIndex = Math.min(highlightedNamespaceIndex + 1, filtered.length - 1);
+        renderNamespaceFilters(document.getElementById('namespace-search').value);
+        scrollToHighlighted();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        highlightedNamespaceIndex = Math.max(highlightedNamespaceIndex - 1, 0);
+        renderNamespaceFilters(document.getElementById('namespace-search').value);
+        scrollToHighlighted();
+      } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (highlightedNamespaceIndex >= 0 && highlightedNamespaceIndex < filtered.length) {
+          setNamespace(filtered[highlightedNamespaceIndex]);
+          closeNamespaceDropdown();
+        }
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        closeNamespaceDropdown();
+      }
+    }
+
+    function scrollToHighlighted() {
+      const optionsContainer = document.getElementById('namespace-options');
+      const highlighted = optionsContainer.querySelector('.dropdown-option.highlighted');
+      if (highlighted) {
+        highlighted.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      }
+    }
+
+    // Setup dropdown event listeners
+    function setupNamespaceDropdown() {
+      const selected = document.getElementById('namespace-selected');
+      const search = document.getElementById('namespace-search');
+
+      // Toggle dropdown
+      selected.addEventListener('click', toggleNamespaceDropdown);
+
+      // Filter on input
+      search.addEventListener('input', filterNamespaceOptions);
+
+      // Keyboard navigation
+      search.addEventListener('keydown', handleNamespaceKeyboard);
+
+      // Prevent dropdown from closing when clicking inside
+      document.getElementById('namespace-menu').addEventListener('click', (e) => {
+        e.stopPropagation();
+      });
+
+      // Close dropdown when clicking outside
+      document.addEventListener('click', (e) => {
+        const dropdown = document.querySelector('.namespace-dropdown');
+        if (dropdown && !dropdown.contains(e.target)) {
+          closeNamespaceDropdown();
+        }
+      });
+    }
+
+    function setNamespace(namespace) {
+      currentNamespace = namespace;
+      localStorage.setItem('k8v-namespace', namespace);
+      reconnectWithNamespace();
+    }
+
+    function reconnectWithNamespace() {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.close();
+      }
+
+      // Clear state
+      Object.keys(resources).forEach(key => delete resources[key]);
+      events.length = 0;
+      snapshotComplete = false;
+
+      // Re-render and reconnect
+      updateStatCards();
+      renderResourceList();
+      renderNamespaceFilters();
+      connect();
     }
 
     // ---------- Stats ----------
@@ -345,6 +563,23 @@
       const list = Object.values(resources)
         .filter(r => r.type === currentFilter)
         .sort((a,b) => a.name.localeCompare(b.name));
+
+      // Show empty state if no resources
+      if (list.length === 0) {
+        const empty = document.createElement('div');
+        empty.innerHTML = `
+          <div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: #666;">
+            <div style="font-size: 48px; margin-bottom: 16px;">📭</div>
+            <div style="font-size: 16px; margin-bottom: 8px;">No ${currentFilter}s found</div>
+            <div style="font-size: 13px;">
+              ${currentNamespace !== 'all' ? `in namespace "${currentNamespace}"` : 'in cluster'}
+            </div>
+          </div>
+        `;
+        container.appendChild(empty);
+        return;
+      }
+
       for (const r of list) {
         container.appendChild(createResourceElement(r));
       }
@@ -560,7 +795,14 @@
     }
 
     // ---------- Init ----------
-    renderFilters(); updateStatCards(); renderResourceList(); connect();
+    renderFilters();
+    updateStatCards();
+    renderResourceList();
+    setupNamespaceDropdown();  // Setup dropdown event listeners
+    fetchNamespaces();  // Fetch namespaces first
+    setTimeout(() => {
+      connect();  // Connect after namespaces loaded
+    }, 100);
   </script>
 </body>
 </html>

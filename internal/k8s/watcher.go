@@ -3,6 +3,7 @@ package k8s
 import (
 	"fmt"
 	"log"
+	"sort"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -450,6 +451,46 @@ func (w *Watcher) GetSnapshot() []ResourceEvent {
 	}
 
 	fmt.Printf("Snapshot contains %d resources\n", len(events))
+	return events
+}
+
+// GetNamespaces returns all unique namespaces from cached resources
+func (w *Watcher) GetNamespaces() []string {
+	nsMap := make(map[string]bool)
+	resources := w.cache.List()
+	for _, r := range resources {
+		if r.Namespace != "" {
+			nsMap[r.Namespace] = true
+		}
+	}
+
+	namespaces := make([]string, 0, len(nsMap))
+	for ns := range nsMap {
+		namespaces = append(namespaces, ns)
+	}
+	sort.Strings(namespaces)
+	return namespaces
+}
+
+// GetSnapshotFiltered returns resources filtered by namespace
+func (w *Watcher) GetSnapshotFiltered(namespace string) []ResourceEvent {
+	var resources []*types.Resource
+	if namespace == "" {
+		resources = w.cache.List()
+	} else {
+		resources = w.cache.ListByNamespace(namespace)
+	}
+
+	events := make([]ResourceEvent, len(resources))
+	for i, resource := range resources {
+		events[i] = ResourceEvent{
+			Type:     EventAdded,
+			Resource: resource,
+		}
+	}
+
+	fmt.Printf("Filtered snapshot contains %d resources (namespace=%s)\n",
+		len(events), namespace)
 	return events
 }
 

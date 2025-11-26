@@ -18,9 +18,10 @@ var upgrader = websocket.Upgrader{
 
 // Client represents a WebSocket client connection
 type Client struct {
-	conn *websocket.Conn
-	send chan k8s.ResourceEvent
-	hub  *Hub
+	conn      *websocket.Conn
+	send      chan k8s.ResourceEvent
+	hub       *Hub
+	namespace string // namespace filter ("" = all namespaces)
 }
 
 // Hub manages all active WebSocket connections
@@ -64,6 +65,11 @@ func (h *Hub) Run() {
 		case event := <-h.broadcast:
 			h.mu.RLock()
 			for client := range h.clients {
+				// Skip if client has namespace filter and resource doesn't match
+				if client.namespace != "" && event.Resource.Namespace != client.namespace {
+					continue
+				}
+
 				select {
 				case client.send <- event:
 				default:
@@ -90,17 +96,24 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Parse namespace filter from query params
+	namespace := r.URL.Query().Get("namespace")
+	if namespace == "" || namespace == "all" {
+		namespace = "" // Empty string = all namespaces
+	}
+
 	client := &Client{
-		conn: conn,
-		send: make(chan k8s.ResourceEvent, 10000), // Large buffer for initial snapshot
-		hub:  s.hub,
+		conn:      conn,
+		send:      make(chan k8s.ResourceEvent, 10000), // Large buffer for initial snapshot
+		hub:       s.hub,
+		namespace: namespace,
 	}
 
 	s.hub.register <- client
 
-	// Send initial snapshot of all resources synchronously before starting pumps
-	snapshot := s.watcher.GetSnapshot()
-	log.Printf("Sending snapshot of %d resources to new client", len(snapshot))
+	// Send initial snapshot of resources (filtered by namespace) synchronously before starting pumps
+	snapshot := s.watcher.GetSnapshotFiltered(namespace)
+	log.Printf("Sending filtered snapshot of %d resources (namespace=%s) to new client", len(snapshot), namespace)
 
 	// Send snapshot directly without using the channel to avoid race condition
 	batchSize := 1000

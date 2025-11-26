@@ -34,3 +34,12 @@ func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
 		"resources": s.watcher.GetResourceCount(),
 	})
 }
+
+// handleNamespaces returns list of namespaces in the cluster
+func (s *Server) handleNamespaces(w http.ResponseWriter, r *http.Request) {
+	namespaces := s.watcher.GetNamespaces()
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"namespaces": namespaces,
+	})
+}

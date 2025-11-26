@@ -33,6 +33,7 @@ func (s *Server) Start() error {
 	// Set up HTTP routes
 	http.HandleFunc("/", s.handleIndex)
 	http.HandleFunc("/health", s.handleHealth)
+	http.HandleFunc("/api/namespaces", s.handleNamespaces)
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		s.handleWebSocket(w, r)
 	})
