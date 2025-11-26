@@ -98,21 +98,26 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 
 	s.hub.register <- client
 
-	// Send initial snapshot of all resources
-	go func() {
-		snapshot := s.watcher.GetSnapshot()
-		for _, event := range snapshot {
-			// Try to send with recovery from panic if channel is closed
-			func() {
-				defer func() {
-					if r := recover(); r != nil {
-						log.Printf("Recovered from panic while sending snapshot: %v", r)
-					}
-				}()
-				client.send <- event
-			}()
+	// Send initial snapshot of all resources synchronously before starting pumps
+	snapshot := s.watcher.GetSnapshot()
+	log.Printf("Sending snapshot of %d resources to new client", len(snapshot))
+
+	// Send snapshot directly without using the channel to avoid race condition
+	batchSize := 1000
+	for i, event := range snapshot {
+		err := conn.WriteJSON(event)
+		if err != nil {
+			log.Printf("Failed to send snapshot event %d/%d: %v", i+1, len(snapshot), err)
+			conn.Close()
+			s.hub.unregister <- client
+			return
 		}
-	}()
+		// Log progress every batch
+		if (i+1)%batchSize == 0 {
+			log.Printf("Snapshot progress: %d/%d resources sent", i+1, len(snapshot))
+		}
+	}
+	log.Printf("Snapshot sent successfully: %d resources", len(snapshot))
 
 	// Start goroutines for read/write
 	go client.writePump()
@@ -142,6 +147,10 @@ func (c *Client) writePump() {
 	for event := range c.send {
 		err := c.conn.WriteJSON(event)
 		if err != nil {
+			// Don't log error if connection is closed, it's expected
+			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+				return
+			}
 			log.Printf("Write error: %v", err)
 			return
 		}

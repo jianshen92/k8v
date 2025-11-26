@@ -1,525 +1,566 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>K8V - Kubernetes Visualizer</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>K8V - Kubernetes Visualizer</title>
+  <!-- Fonts to match prototype -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #e0e0e0; overflow: hidden; }
 
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #1a1a1a;
-            color: #e0e0e0;
-            padding: 20px;
-        }
+    .container { display: flex; flex-direction: column; height: 100vh; background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%); padding: 20px; gap: 16px; }
 
-        header {
-            margin-bottom: 20px;
-        }
+    /* Top Navigation */
+    .top-nav { background: rgba(30, 30, 30, 0.6); backdrop-filter: blur(20px); border-radius: 16px; padding: 16px 24px; display: flex; align-items: center; gap: 24px; border: 1px solid rgba(255, 255, 255, 0.06); flex-shrink: 0; }
+    .logo { width: 40px; height: 40px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 700; }
+    .nav-tabs { display: flex; gap: 8px; }
+    .nav-tab { padding: 10px 20px; border-radius: 10px; font-family: 'Space Grotesk', sans-serif; font-size: 14px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; transition: all 0.3s; border: none; background: transparent; color: #888; }
+    .nav-tab.active { background: #C4F561; color: #000; letter-spacing: 1px; }
+    .nav-tab:hover:not(.active) { background: rgba(255, 255, 255, 0.05); color: #fff; }
+    .nav-right { margin-left: auto; display: flex; gap: 12px; align-items: center; color: #888; font-size: 12px; }
 
-        h1 {
-            font-size: 24px;
-            margin-bottom: 10px;
-        }
+    .main-wrapper { display: flex; flex: 1; overflow: hidden; gap: 16px; }
+    .sidebar { flex: 1; background: transparent; padding: 0 8px 8px 8px; overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 16px; align-content: start; }
+    .sidebar::-webkit-scrollbar { width: 8px; }
+    .sidebar::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
+    .sidebar::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
 
-        .stats {
-            color: #888;
-            font-size: 14px;
-        }
+    .header { margin-bottom: 8px; grid-column: 1 / -1; }
+    .header h1 { font-family: 'Inter', sans-serif; font-size: 32px; font-weight: 800; margin-bottom: 4px; background: linear-gradient(135deg, #fff 0%, #a0a0a0 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; letter-spacing: -0.5px; line-height: 1; }
+    .header-meta { display: flex; align-items: center; gap: 12px; margin-top: 6px; font-size: 12px; color: #888; }
 
-        /* Table styles */
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            background: #2a2a2a;
-            border-radius: 8px;
-            overflow: hidden;
-        }
+    /* Stats */
+    .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin-bottom: 4px; grid-column: 1 / -1; }
+    .stat-card { background: rgba(255,255,255,0.03); backdrop-filter: blur(10px); padding: 12px 14px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.08); position: relative; overflow: hidden; transition: all 0.3s cubic-bezier(0.4,0,0.2,1); }
+    .stat-card::before { content: ''; position: absolute; top:0; left:0; width:100%; height:3px; background: linear-gradient(90deg, #667eea, #764ba2); }
+    .stat-card.highlight { background: linear-gradient(135deg, #C4F561 0%, #9FD356 100%); border: 1px solid rgba(196,245,97,0.3); }
+    .stat-card.highlight * { color: #000 !important; }
+    .stat-label { font-family: 'Space Grotesk', sans-serif; font-size: 10px; color: #888; text-transform: uppercase; letter-spacing: 1.2px; font-weight: 600; margin-bottom: 6px; }
+    .stat-value { font-size: 24px; font-weight: 800; background: linear-gradient(135deg, #fff 0%, #888 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; line-height: 1; }
 
-        thead {
-            background: #333;
-        }
+    /* Filters */
+    .resource-filter { grid-column: 1 / -1; }
+    .filter-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+    .filter-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); color: #888; padding: 10px 16px; border-radius: 12px; font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; transition: all 0.25s; min-width: 110px; }
+    .filter-btn:hover:not(.active) { background: rgba(255,255,255,0.08); color: #fff; transform: translateY(-1px); }
+    .filter-btn.active { background: #C4F561; border-color: #C4F561; color: #000; box-shadow: 0 8px 20px rgba(196,245,97,0.3); }
 
-        th {
-            padding: 12px;
-            text-align: left;
-            font-weight: 600;
-            border-bottom: 2px solid #444;
-        }
+    /* Resource list */
+    .resource-list { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; margin-bottom: 20px; }
 
-        tbody tr {
-            border-bottom: 1px solid #333;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
+    .resource-item { background: rgba(255,255,255,0.03); backdrop-filter: blur(10px); padding: 12px; border-radius: 12px; cursor: pointer; transition: all 0.3s cubic-bezier(0.4,0,0.2,1); display: flex; align-items: flex-start; gap: 10px; border: 1px solid rgba(255,255,255,0.05); position: relative; overflow: hidden; min-height: 56px; }
+    .resource-item::before { content: ''; position: absolute; left:0; top:0; bottom:0; width:3px; background: linear-gradient(180deg, #4CAF50, #8BC34A); opacity: 0; transition: opacity 0.3s; }
+    .resource-item:hover { background: rgba(255,255,255,0.06); transform: translateX(4px); border-color: rgba(255,255,255,0.12); box-shadow: 0 4px 16px rgba(0,0,0,0.2); }
+    .resource-item:hover::before { opacity: 1; }
+    .resource-item.pod::before { background: linear-gradient(180deg, #4CAF50, #8BC34A); }
+    .resource-item.deployment::before { background: linear-gradient(180deg, #2196F3, #03A9F4); }
+    .resource-item.service::before { background: linear-gradient(180deg, #9C27B0, #E91E63); }
+    .resource-item.ingress::before { background: linear-gradient(180deg, #FF9800, #FFC107); }
+    .resource-item.replicaset::before { background: linear-gradient(180deg, #00BCD4, #009688); }
+    .resource-item.configmap::before, .resource-item.secret::before { background: linear-gradient(180deg, #607D8B, #78909C); }
 
-        tbody tr:hover {
-            background: #353535;
-        }
+    .resource-icon { width: 32px; height: 32px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; transition: all 0.3s; font-weight: 700; }
+    .resource-item:hover .resource-icon { transform: scale(1.05); }
+    .resource-icon.pod { background: linear-gradient(135deg, rgba(76,175,80,0.2), rgba(139,195,74,0.2)); color: #8BC34A; box-shadow: 0 4px 12px rgba(76,175,80,0.2); }
+    .resource-icon.deployment { background: linear-gradient(135deg, rgba(33,150,243,0.2), rgba(3,169,244,0.2)); color: #03A9F4; box-shadow: 0 4px 12px rgba(33,150,243,0.2); }
+    .resource-icon.service { background: linear-gradient(135deg, rgba(156,39,176,0.2), rgba(233,30,99,0.2)); color: #E91E63; box-shadow: 0 4px 12px rgba(156,39,176,0.2); }
+    .resource-icon.ingress { background: linear-gradient(135deg, rgba(255,152,0,0.2), rgba(255,193,7,0.2)); color: #FFC107; box-shadow: 0 4px 12px rgba(255,152,0,0.2); }
+    .resource-icon.replicaset { background: linear-gradient(135deg, rgba(0,188,212,0.2), rgba(0,150,136,0.2)); color: #00BCD4; box-shadow: 0 4px 12px rgba(0,188,212,0.2); }
+    .resource-icon.configmap, .resource-icon.secret { background: linear-gradient(135deg, rgba(96,125,139,0.2), rgba(120,144,156,0.2)); color: #78909C; box-shadow: 0 4px 12px rgba(96,125,139,0.2); }
 
-        td {
-            padding: 12px;
-        }
+    .resource-header { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+    .resource-info { flex: 1; min-width: 0; }
+    .resource-name { font-size: 13px; font-weight: 700; color: #fff; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 2px; line-height: 1.2; }
+    .resource-subtitle { font-size: 11px; color: #666; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .resource-status { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; box-shadow: 0 0 6px currentColor; }
+    .resource-status.healthy { background: #4CAF50; color: #4CAF50; }
+    .resource-status.warning { background: #FFC107; color: #FFC107; }
+    .resource-status.error { background: #f44336; color: #f44336; animation: pulse-error 2s infinite; }
+    @keyframes pulse-error { 0%,100%{opacity:1; box-shadow:0 0 6px #f44336;} 50%{opacity:0.6; box-shadow:0 0 12px #f44336;} }
 
-        /* Health indicators */
-        .health {
-            display: inline-block;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-size: 12px;
-            font-weight: 600;
-        }
+    /* Events drawer button */
+    .events-toggle { position: fixed; bottom: 24px; right: 24px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: #fff; border: none; border-radius: 50%; width: 56px; height: 56px; display: flex; align-items: center; justify-content: center; cursor: pointer; box-shadow: 0 4px 16px rgba(102,126,234,0.4); transition: all 0.3s; z-index: 999; font-size: 24px; }
+    .events-toggle:hover { transform: scale(1.1); box-shadow: 0 6px 24px rgba(102,126,234,0.6); }
+    .events-badge { position: absolute; top: -4px; right: -4px; background: #f44336; color: #fff; border-radius: 12px; padding: 2px 6px; font-size: 10px; font-weight: 700; min-width: 20px; text-align: center; }
 
-        .health.healthy {
-            background: #2d5f2e;
-            color: #81c784;
-        }
+    /* Events drawer */
+    #events-drawer { position: fixed; right: 0; top: 0; bottom: 0; width: 400px; background: rgba(20,20,24,0.98); backdrop-filter: blur(20px); border-left: 1px solid rgba(255,255,255,0.08); transform: translateX(100%); transition: transform 0.3s ease; overflow-y: auto; z-index: 1000; }
+    #events-drawer.visible { transform: translateX(0); }
+    #events-drawer::-webkit-scrollbar { width: 8px; }
+    #events-drawer::-webkit-scrollbar-track { background: rgba(255,255,255,0.02); }
+    #events-drawer::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+    .events-drawer-header { background: rgba(32,32,40,0.9); padding: 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); position: sticky; top: 0; z-index: 1; }
+    .events-drawer-header h2 { font-family: 'Space Grotesk', sans-serif; font-size: 18px; margin: 0; color: #C4F561; }
+    .events-drawer-content { padding: 16px; }
+    .event-item { padding: 12px; margin-bottom: 8px; background: rgba(255,255,255,0.03); border-radius: 8px; border-left: 3px solid rgba(255,255,255,0.1); transition: all 0.2s; }
+    .event-item:hover { background: rgba(255,255,255,0.06); }
+    .event-item.warning { border-left-color: #FFC107; }
+    .event-item.error { border-left-color: #f44336; }
+    .event-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .event-type { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 1px; padding: 2px 8px; border-radius: 4px; background: rgba(255,255,255,0.1); }
+    .event-type.ADDED { background: rgba(76,175,80,0.2); color: #8BC34A; }
+    .event-type.MODIFIED { background: rgba(255,193,7,0.2); color: #FFC107; }
+    .event-type.DELETED { background: rgba(244,67,54,0.2); color: #f44336; }
+    .event-time { font-size: 11px; color: #666; }
+    .event-message { font-size: 13px; color: #ccc; line-height: 1.4; }
 
-        .health.warning {
-            background: #5f4c2d;
-            color: #ffb74d;
-        }
-
-        .health.error {
-            background: #5f2d2d;
-            color: #e57373;
-        }
-
-        .health.unknown {
-            background: #3a3a3a;
-            color: #999;
-        }
-
-        /* Detail panel */
-        #detail-panel {
-            position: fixed;
-            right: 0;
-            top: 0;
-            bottom: 0;
-            width: 600px;
-            background: #2a2a2a;
-            box-shadow: -4px 0 12px rgba(0,0,0,0.5);
-            transform: translateX(100%);
-            transition: transform 0.3s ease;
-            overflow-y: auto;
-            z-index: 1000;
-        }
-
-        #detail-panel.visible {
-            transform: translateX(0);
-        }
-
-        .panel-header {
-            background: #333;
-            padding: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            border-bottom: 2px solid #444;
-        }
-
-        .panel-header h2 {
-            font-size: 18px;
-        }
-
-        .close-btn {
-            background: none;
-            border: none;
-            color: #e0e0e0;
-            font-size: 24px;
-            cursor: pointer;
-            padding: 0;
-            width: 32px;
-            height: 32px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            border-radius: 4px;
-        }
-
-        .close-btn:hover {
-            background: #444;
-        }
-
-        .panel-tabs {
-            display: flex;
-            background: #2a2a2a;
-            border-bottom: 1px solid #444;
-        }
-
-        .tab {
-            padding: 12px 24px;
-            cursor: pointer;
-            border-bottom: 2px solid transparent;
-            transition: all 0.2s;
-        }
-
-        .tab:hover {
-            background: #333;
-        }
-
-        .tab.active {
-            border-bottom-color: #4a9eff;
-            color: #4a9eff;
-        }
-
-        .panel-content {
-            padding: 20px;
-        }
-
-        .tab-content {
-            display: none;
-        }
-
-        .tab-content.active {
-            display: block;
-        }
-
-        .section {
-            margin-bottom: 24px;
-        }
-
-        .section h3 {
-            font-size: 16px;
-            margin-bottom: 12px;
-            color: #4a9eff;
-        }
-
-        .section h4 {
-            font-size: 14px;
-            margin-top: 16px;
-            margin-bottom: 8px;
-            color: #999;
-        }
-
-        .info-grid {
-            display: grid;
-            grid-template-columns: 120px 1fr;
-            gap: 8px;
-        }
-
-        .info-label {
-            color: #888;
-        }
-
-        .relationship-list {
-            list-style: none;
-        }
-
-        .relationship-list li {
-            padding: 8px;
-            margin-bottom: 4px;
-            background: #333;
-            border-radius: 4px;
-        }
-
-        .relationship-link {
-            color: #4a9eff;
-            text-decoration: none;
-            cursor: pointer;
-        }
-
-        .relationship-link:hover {
-            text-decoration: underline;
-        }
-
-        .empty-state {
-            color: #666;
-            font-style: italic;
-        }
-
-        pre {
-            background: #1a1a1a;
-            padding: 16px;
-            border-radius: 4px;
-            overflow-x: auto;
-            font-size: 12px;
-            line-height: 1.5;
-        }
-
-        code {
-            color: #81c784;
-        }
-    </style>
+    /* Detail panel (reuse logic) */
+    #detail-panel { position: fixed; right: 0; top: 0; bottom: 0; width: 560px; background: rgba(20,20,24,0.98); border-left: 1px solid rgba(255,255,255,0.08); transform: translateX(100%); transition: transform 0.3s ease; overflow-y: auto; z-index: 1000; }
+    #detail-panel.visible { transform: translateX(0); }
+    .detail-header { background: rgba(32,32,40,0.9); padding: 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .panel-tabs { display: flex; background: rgba(24,24,30,0.9); border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .tab { padding: 12px 24px; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
+    .tab.active { border-bottom-color: #C4F561; color: #C4F561; }
+    .panel-content { padding: 20px; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+    .section { margin-bottom: 24px; }
+    .section h3 { font-size: 16px; margin-bottom: 12px; color: #C4F561; font-family: 'Space Grotesk', sans-serif; text-transform: uppercase; letter-spacing: 1px; }
+    .section h4 { font-size: 13px; margin-top: 16px; margin-bottom: 8px; color: #999; }
+    .info-grid { display: grid; grid-template-columns: 120px 1fr; gap: 8px; }
+    .info-label { color: #888; }
+    .relationship-list { list-style: none; }
+    .relationship-list li { padding: 8px; margin-bottom: 4px; background: rgba(255,255,255,0.03); border-radius: 6px; border: 1px solid rgba(255,255,255,0.06); }
+    .relationship-link { color: #C4F561; text-decoration: none; cursor: pointer; }
+    .relationship-link:hover { text-decoration: underline; }
+    pre { background: #0b0f14; padding: 16px; border-radius: 8px; overflow-x: auto; font-size: 12px; line-height: 1.5; border: 1px solid rgba(255,255,255,0.08); }
+    code { color: #81c784; }
+  </style>
 </head>
 <body>
-    <header>
-        <h1>K8V - Kubernetes Cluster Visualizer</h1>
-        <div class="stats">
-            <span id="resource-count">0 resources</span> |
-            <span id="connection-status">Connecting...</span>
-        </div>
-    </header>
-
-    <table>
-        <thead>
-            <tr>
-                <th>Type</th>
-                <th>Namespace</th>
-                <th>Name</th>
-                <th>Status</th>
-                <th>Health</th>
-            </tr>
-        </thead>
-        <tbody id="resources"></tbody>
-    </table>
-
-    <div id="detail-panel">
-        <div class="panel-header">
-            <h2 id="detail-title">Resource Details</h2>
-            <button class="close-btn" onclick="closeDetail()">&times;</button>
-        </div>
-
-        <div class="panel-tabs">
-            <div class="tab active" onclick="switchTab('overview')">Overview</div>
-            <div class="tab" onclick="switchTab('yaml')">YAML</div>
-        </div>
-
-        <div class="panel-content">
-            <div id="overview-tab" class="tab-content active">
-                <div class="section">
-                    <h3>Status</h3>
-                    <div class="info-grid" id="status-info"></div>
-                </div>
-
-                <div class="section" id="relationships-section">
-                    <h3>Relationships</h3>
-                </div>
-            </div>
-
-            <div id="yaml-tab" class="tab-content">
-                <pre><code id="yaml-content"></code></pre>
-            </div>
-        </div>
+  <div class="container">
+    <div class="top-nav">
+      <div class="logo">K8</div>
+      <div class="nav-tabs">
+        <button class="nav-tab active" onclick="switchMainTab('dashboard')">Dashboard</button>
+        <button class="nav-tab" onclick="switchMainTab('topology')">Topology</button>
+      </div>
+      <div class="nav-right">
+        <span id="connection-status">Connecting...</span>
+        <span>•</span>
+        <span id="resource-count">0 resources</span>
+      </div>
     </div>
 
-    <script>
-        // State management
-        const resources = {}; // resourceId → Resource object
-        let ws = null;
+    <div class="main-wrapper">
+      <!-- Dashboard View -->
+      <div class="sidebar" id="dashboard-view">
+        <div class="header">
+          <h1>Cluster Dashboard</h1>
+          <div class="header-meta">
+            <span>Live updates over WebSocket</span>
+          </div>
+        </div>
 
-        // WebSocket connection
-        let snapshotComplete = false;
-        let snapshotCount = 0;
+        <!-- Stats cards -->
+        <div class="stats">
+          <div class="stat-card highlight"><div class="stat-label">Total Resources</div><div class="stat-value" id="stat-total">0</div></div>
+          <div class="stat-card"><div class="stat-label">Pods</div><div class="stat-value" id="stat-pod">0</div></div>
+          <div class="stat-card"><div class="stat-label">Deployments</div><div class="stat-value" id="stat-deployment">0</div></div>
+          <div class="stat-card"><div class="stat-label">ReplicaSets</div><div class="stat-value" id="stat-replicaset">0</div></div>
+          <div class="stat-card"><div class="stat-label">Services</div><div class="stat-value" id="stat-service">0</div></div>
+          <div class="stat-card"><div class="stat-label">Ingress</div><div class="stat-value" id="stat-ingress">0</div></div>
+          <div class="stat-card"><div class="stat-label">ConfigMaps</div><div class="stat-value" id="stat-configmap">0</div></div>
+          <div class="stat-card"><div class="stat-label">Secrets</div><div class="stat-value" id="stat-secret">0</div></div>
+        </div>
 
-        function connect() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const wsUrl = `${protocol}//${window.location.host}/ws`;
+        <!-- Filters -->
+        <div class="resource-filter">
+          <div class="filter-buttons" id="filters"></div>
+        </div>
 
-            console.log('%c🚀 Connecting to K8V...', 'color: #4a9eff; font-size: 14px; font-weight: bold');
-            ws = new WebSocket(wsUrl);
+        <!-- Resource cards list -->
+        <div class="resource-list" id="resource-list"></div>
+      </div>
 
-            ws.onopen = () => {
-                console.log('%c✓ WebSocket connected - receiving initial snapshot...', 'color: #81c784; font-weight: bold');
-                document.getElementById('connection-status').textContent = 'Connected';
-                snapshotComplete = false;
-                snapshotCount = 0;
-            };
+      <!-- Topology View -->
+      <div class="sidebar" id="topology-view" style="display: none;">
+        <div class="header">
+          <h1>Cluster Topology</h1>
+          <div class="header-meta">
+            <span>Resource relationship visualization</span>
+          </div>
+        </div>
+        <div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: #888;">
+          <div style="font-size: 48px; margin-bottom: 16px;">🚧</div>
+          <h2 style="color: #C4F561; margin-bottom: 8px;">Topology View Coming Soon</h2>
+          <p>Interactive resource relationship diagrams will be available in a future update.</p>
+        </div>
+      </div>
+    </div>
+  </div>
 
-            ws.onmessage = (event) => {
-                const msg = JSON.parse(event.data);
+  <!-- Events toggle button -->
+  <button class="events-toggle" onclick="toggleEventsDrawer()" title="View Recent Events">
+    📋
+    <span class="events-badge" id="events-badge" style="display: none;">0</span>
+  </button>
 
-                // Track snapshot completion
-                if (!snapshotComplete && msg.type === 'ADDED') {
-                    snapshotCount++;
-                    // Assume snapshot is complete after 1 second of no new ADDED events
-                    clearTimeout(window.snapshotTimer);
-                    window.snapshotTimer = setTimeout(() => {
-                        if (!snapshotComplete) {
-                            snapshotComplete = true;
-                            console.log(
-                                `%c✓ Initial snapshot complete: ${snapshotCount} resources loaded`,
-                                'color: #81c784; font-weight: bold; font-size: 12px'
-                            );
-                            console.log('%c👀 Watching for live updates...', 'color: #4a9eff; font-style: italic');
-                        }
-                    }, 1000);
-                }
+  <!-- Events drawer -->
+  <div id="events-drawer">
+    <div class="events-drawer-header">
+      <h2>Recent Events</h2>
+      <button class="nav-tab" style="background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:8px;" onclick="toggleEventsDrawer()">&times;</button>
+    </div>
+    <div class="events-drawer-content" id="events"></div>
+  </div>
 
-                handleResourceEvent(msg);
-            };
+  <!-- Detail panel -->
+  <div id="detail-panel">
+    <div class="detail-header">
+      <h2 id="detail-title">Resource Details</h2>
+      <button class="nav-tab" style="background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:8px;" onclick="closeDetail()">&times;</button>
+    </div>
+    <div class="panel-tabs">
+      <div class="tab active" onclick="switchTab('overview')">Overview</div>
+      <div class="tab" onclick="switchTab('yaml')">YAML</div>
+    </div>
+    <div class="panel-content">
+      <div id="overview-tab" class="tab-content active">
+        <div class="section">
+          <h3>Status</h3>
+          <div class="info-grid" id="status-info"></div>
+        </div>
+        <div class="section" id="relationships-section"><h3>Relationships</h3></div>
+      </div>
+      <div id="yaml-tab" class="tab-content"><pre><code id="yaml-content"></code></pre></div>
+    </div>
+  </div>
 
-            ws.onerror = (error) => {
-                console.error('%c✗ WebSocket error:', 'color: #e57373; font-weight: bold', error);
-                document.getElementById('connection-status').textContent = 'Error';
-            };
+  <script>
+    // ---------- State ----------
+    const resources = {}; // id -> resource
+    let ws = null;
+    let snapshotComplete = false;
+    let snapshotCount = 0;
+    let currentFilter = 'Pod';
+    const events = []; // recent update events
+    const MAX_EVENTS = 100;
+    const resourceTypes = ['Pod','Deployment','ReplicaSet','Service','Ingress','ConfigMap','Secret'];
 
-            ws.onclose = () => {
-                console.log('%c⚠ WebSocket closed - reconnecting in 3s...', 'color: #ffb74d');
-                document.getElementById('connection-status').textContent = 'Disconnected';
-                // Attempt to reconnect after 3 seconds
-                setTimeout(connect, 3000);
-            };
+    // ---------- WebSocket ----------
+    function connect() {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}/ws`;
+      ws = new WebSocket(wsUrl);
+      ws.onopen = () => { document.getElementById('connection-status').textContent = 'Connected'; snapshotComplete = false; snapshotCount = 0; };
+      ws.onmessage = (event) => {
+        const msg = JSON.parse(event.data);
+        if (!snapshotComplete && msg.type === 'ADDED') {
+          snapshotCount++; clearTimeout(window.snapshotTimer);
+          window.snapshotTimer = setTimeout(() => { if (!snapshotComplete) { snapshotComplete = true; } }, 900);
         }
+        handleResourceEvent(msg);
+      };
+      ws.onerror = () => { document.getElementById('connection-status').textContent = 'Error'; };
+      ws.onclose = () => { document.getElementById('connection-status').textContent = 'Disconnected'; setTimeout(connect, 2000); };
+    }
 
-        // Handle resource events
-        function handleResourceEvent(event) {
-            const eventStyle = event.type === 'ADDED' ? 'color: #81c784' :
-                             event.type === 'MODIFIED' ? 'color: #ffb74d' :
-                             'color: #e57373';
+    // ---------- Filters ----------
+    function renderFilters() {
+      const container = document.getElementById('filters');
+      container.innerHTML = '';
+      for (const t of resourceTypes) {
+        const btn = document.createElement('button');
+        btn.className = 'filter-btn' + (currentFilter === t ? ' active' : '');
+        btn.textContent = t + (t === 'Ingress' ? '' : (t.endsWith('s') ? '' : 's'));
+        btn.addEventListener('click', () => setFilter(t));
+        container.appendChild(btn);
+      }
+    }
+    function setFilter(type) {
+      currentFilter = type;
+      renderFilters();
+      renderResourceList();
+    }
 
-            console.log(
-                `%c[${event.type}] %c${event.resource.type}:%c${event.resource.namespace}/%c${event.resource.name} %c(${event.resource.health})`,
-                eventStyle + '; font-weight: bold',
-                'color: #4a9eff',
-                'color: #999',
-                'color: #fff',
-                'color: #999'
-            );
+    // ---------- Stats ----------
+    function updateStatCards() {
+      const counts = { total: 0 };
+      for (const t of resourceTypes) counts[t] = 0;
+      for (const r of Object.values(resources)) { counts.total++; if (counts[r.type] !== undefined) counts[r.type]++; }
+      document.getElementById('stat-total').textContent = counts.total;
+      document.getElementById('stat-pod').textContent = counts['Pod'];
+      document.getElementById('stat-deployment').textContent = counts['Deployment'];
+      document.getElementById('stat-replicaset').textContent = counts['ReplicaSet'];
+      document.getElementById('stat-service').textContent = counts['Service'];
+      document.getElementById('stat-ingress').textContent = counts['Ingress'];
+      document.getElementById('stat-configmap').textContent = counts['ConfigMap'];
+      document.getElementById('stat-secret').textContent = counts['Secret'];
+      document.getElementById('resource-count').textContent = `${counts.total} resources`;
+    }
 
-            if (event.type === 'DELETED') {
-                delete resources[event.resource.id];
-                removeTableRow(event.resource.id);
+    // ---------- Resource cards ----------
+    function typeToClass(t) { return t.toLowerCase(); }
+    function typeShort(t) { return t.replace(/[a-z]/g, '').slice(0,2) || t[0]; }
+
+    // Helper to create a resource DOM element
+    function createResourceElement(r) {
+      const item = document.createElement('div');
+      item.className = `resource-item ${typeToClass(r.type)}`;
+      item.setAttribute('data-resource-id', r.id);
+      item.addEventListener('click', () => showResource(r.id));
+
+      const icon = document.createElement('div');
+      icon.className = `resource-icon ${typeToClass(r.type)}`;
+      icon.textContent = r.type[0];
+
+      const header = document.createElement('div');
+      header.className = 'resource-header';
+
+      const info = document.createElement('div');
+      info.className = 'resource-info';
+
+      const name = document.createElement('div');
+      name.className = 'resource-name';
+      name.textContent = r.name;
+
+      const sub = document.createElement('div');
+      sub.className = 'resource-subtitle';
+      sub.textContent = `${r.namespace || '-'} • ${r.type}`;
+
+      info.appendChild(name);
+      info.appendChild(sub);
+
+      const statusDot = document.createElement('div');
+      statusDot.className = `resource-status ${r.health || 'unknown'}`;
+
+      header.appendChild(info);
+      header.appendChild(statusDot);
+
+      item.appendChild(icon);
+      item.appendChild(header);
+
+      return item;
+    }
+
+    // Full render (used on initial load and filter changes)
+    function renderResourceList() {
+      const container = document.getElementById('resource-list');
+      container.innerHTML = '';
+      const list = Object.values(resources)
+        .filter(r => r.type === currentFilter)
+        .sort((a,b) => a.name.localeCompare(b.name));
+      for (const r of list) {
+        container.appendChild(createResourceElement(r));
+      }
+    }
+
+    // Incremental update - add/update/remove single resource
+    function updateResourceInList(resourceId, eventType) {
+      const container = document.getElementById('resource-list');
+      const existingElement = container.querySelector(`[data-resource-id="${resourceId}"]`);
+
+      if (eventType === 'DELETED') {
+        // Remove the element
+        if (existingElement) {
+          existingElement.remove();
+        }
+        return;
+      }
+
+      const resource = resources[resourceId];
+      if (!resource) return;
+
+      // Check if resource matches current filter
+      const matchesFilter = resource.type === currentFilter;
+
+      if (!matchesFilter) {
+        // Resource doesn't match filter, remove it if it exists
+        if (existingElement) {
+          existingElement.remove();
+        }
+        return;
+      }
+
+      if (eventType === 'MODIFIED' && existingElement) {
+        // Update existing element in place
+        const newElement = createResourceElement(resource);
+        existingElement.replaceWith(newElement);
+      } else if (eventType === 'ADDED') {
+        // Find correct position and insert
+        const allVisible = Object.values(resources)
+          .filter(r => r.type === currentFilter)
+          .sort((a,b) => a.name.localeCompare(b.name));
+
+        const index = allVisible.findIndex(r => r.id === resourceId);
+        const newElement = createResourceElement(resource);
+
+        if (index === allVisible.length - 1 || container.children.length === 0) {
+          // Append at end
+          container.appendChild(newElement);
+        } else {
+          // Insert before next element
+          const nextResource = allVisible[index + 1];
+          if (nextResource) {
+            const nextElement = container.querySelector(`[data-resource-id="${nextResource.id}"]`);
+            if (nextElement) {
+              container.insertBefore(newElement, nextElement);
             } else {
-                resources[event.resource.id] = event.resource;
-                updateTableRow(event.resource);
-
-                // Log relationships for ADDED events
-                if (event.type === 'ADDED' && Object.keys(event.resource.relationships).length > 0) {
-                    const relSummary = [];
-                    for (const [relType, refs] of Object.entries(event.resource.relationships)) {
-                        if (refs && refs.length > 0) {
-                            relSummary.push(`${relType}(${refs.length})`);
-                        }
-                    }
-                    if (relSummary.length > 0) {
-                        console.log(`  └─ Relationships: ${relSummary.join(', ')}`);
-                    }
-                }
+              container.appendChild(newElement);
             }
-
-            updateStats();
+          } else {
+            container.appendChild(newElement);
+          }
         }
+      }
+    }
 
-        // Update table row
-        function updateTableRow(resource) {
-            const tbody = document.getElementById('resources');
-            let row = document.getElementById(`row-${resource.id}`);
+    // ---------- Events ----------
+    let eventsDrawerOpen = false;
+    let unreadEvents = 0;
 
-            if (!row) {
-                row = tbody.insertRow();
-                row.id = `row-${resource.id}`;
-                row.onclick = () => showResource(resource.id);
-            }
+    function toggleEventsDrawer() {
+      eventsDrawerOpen = !eventsDrawerOpen;
+      const drawer = document.getElementById('events-drawer');
+      if (eventsDrawerOpen) {
+        drawer.classList.add('visible');
+        unreadEvents = 0;
+        updateEventsBadge();
+        // Lazy render events when drawer opens
+        renderEvents();
+      } else {
+        drawer.classList.remove('visible');
+      }
+    }
 
-            row.innerHTML = `
-                <td>${resource.type}</td>
-                <td>${resource.namespace || '-'}</td>
-                <td>${resource.name}</td>
-                <td>${resource.status.phase || '-'} ${resource.status.ready || ''}</td>
-                <td><span class="health ${resource.health}">${resource.health}</span></td>
-            `;
+    function updateEventsBadge() {
+      const badge = document.getElementById('events-badge');
+      if (unreadEvents > 0) {
+        badge.textContent = unreadEvents > 99 ? '99+' : unreadEvents;
+        badge.style.display = 'block';
+      } else {
+        badge.style.display = 'none';
+      }
+    }
+
+    function renderEvents() {
+      // Only render if drawer is open (lazy loading)
+      if (!eventsDrawerOpen) return;
+
+      const el = document.getElementById('events');
+      el.innerHTML = '';
+      for (const e of events) {
+        const item = document.createElement('div');
+        item.className = 'event-item ' + (e.type === 'MODIFIED' ? 'warning' : e.type === 'DELETED' ? 'error' : '');
+
+        const header = document.createElement('div');
+        header.className = 'event-header';
+
+        const typeSpan = document.createElement('span');
+        typeSpan.className = 'event-type ' + e.type;
+        typeSpan.textContent = e.type;
+
+        const time = document.createElement('div');
+        time.className = 'event-time';
+        time.textContent = new Date(e.time).toLocaleTimeString();
+
+        header.appendChild(typeSpan);
+        header.appendChild(time);
+
+        const msg = document.createElement('div');
+        msg.className = 'event-message';
+        msg.textContent = `${e.resource.type} › ${e.resource.namespace || 'default'} › ${e.resource.name}`;
+
+        item.appendChild(header);
+        item.appendChild(msg);
+        el.appendChild(item);
+      }
+    }
+
+    // ---------- Event handling ----------
+    function handleResourceEvent(event) {
+      const resourceId = event.resource.id;
+
+      // Update resources state
+      if (event.type === 'DELETED') {
+        delete resources[resourceId];
+      } else {
+        resources[resourceId] = event.resource;
+      }
+
+      // Add to events log
+      events.unshift({ type: event.type, resource: event.resource, time: Date.now() });
+      if (events.length > MAX_EVENTS) events.pop();
+
+      // Increment unread counter if drawer is closed and snapshot is complete
+      if (!eventsDrawerOpen && snapshotComplete) {
+        unreadEvents++;
+        updateEventsBadge();
+      }
+
+      updateStatCards();
+
+      // Use incremental update instead of full rerender
+      if (snapshotComplete) {
+        updateResourceInList(resourceId, event.type);
+      } else {
+        // During initial snapshot, still do full render periodically
+        renderResourceList();
+      }
+
+      renderEvents(); // Will only render if drawer is open
+    }
+
+    // ---------- Detail panel ----------
+    function showResource(resourceId) {
+      const resource = resources[resourceId]; if (!resource) return;
+      document.getElementById('detail-title').textContent = `${resource.type}: ${resource.name}`;
+      const statusInfo = document.getElementById('status-info');
+      statusInfo.innerHTML = `
+        <div class="info-label">Namespace:</div><div>${resource.namespace || '-'}</div>
+        <div class="info-label">Phase:</div><div>${resource.status.phase || '-'}</div>
+        <div class="info-label">Ready:</div><div>${resource.status.ready || '-'}</div>
+        <div class="info-label">Health:</div><div><span class="resource-status ${resource.health}" style="display:inline-block"></span> ${resource.health}</div>
+        ${resource.status.message ? `<div class="info-label">Message:</div><div>${resource.status.message}</div>` : ''}`;
+      const relationshipsSection = document.getElementById('relationships-section');
+      let relationshipsHTML = '<h3>Relationships</h3>';
+      const relationshipTypes = [
+        { key: 'ownedBy', label: 'Owned By' }, { key: 'owns', label: 'Owns' },
+        { key: 'dependsOn', label: 'Depends On' }, { key: 'usedBy', label: 'Used By' },
+        { key: 'exposes', label: 'Exposes' }, { key: 'exposedBy', label: 'Exposed By' },
+        { key: 'routesTo', label: 'Routes To' }, { key: 'routedBy', label: 'Routed By' }
+      ];
+      relationshipTypes.forEach(({ key, label }) => {
+        const refs = resource.relationships[key];
+        if (refs && refs.length > 0) {
+          relationshipsHTML += `<h4>${label}</h4><ul class="relationship-list">${refs.map(ref => `<li><a class="relationship-link" onclick="showResource('${ref.id}')">${ref.type}: ${ref.name}</a></li>`).join('')}</ul>`;
         }
+      });
+      relationshipsSection.innerHTML = relationshipsHTML;
+      document.getElementById('yaml-content').textContent = resource.yaml || 'No YAML available';
+      document.getElementById('detail-panel').classList.add('visible');
+    }
+    function closeDetail() { document.getElementById('detail-panel').classList.remove('visible'); }
+    function switchTab(tabName) {
+      document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      event.target.classList.add('active');
+      document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+      document.getElementById(`${tabName}-tab`).classList.add('active');
+    }
 
-        // Remove table row
-        function removeTableRow(id) {
-            const row = document.getElementById(`row-${id}`);
-            if (row) {
-                row.remove();
-            }
-        }
+    // ---------- Main tab switching ----------
+    function switchMainTab(tabName) {
+      // Update active state on nav tabs
+      document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+      event.target.classList.add('active');
 
-        // Update statistics
-        function updateStats() {
-            const count = Object.keys(resources).length;
-            document.getElementById('resource-count').textContent = `${count} resources`;
-        }
+      // Show/hide views
+      if (tabName === 'dashboard') {
+        document.getElementById('dashboard-view').style.display = 'grid';
+        document.getElementById('topology-view').style.display = 'none';
+      } else if (tabName === 'topology') {
+        document.getElementById('dashboard-view').style.display = 'none';
+        document.getElementById('topology-view').style.display = 'grid';
+      }
+    }
 
-        // Show resource detail panel
-        function showResource(resourceId) {
-            const resource = resources[resourceId];
-            if (!resource) return;
-
-            // Set title
-            document.getElementById('detail-title').textContent =
-                `${resource.type}: ${resource.name}`;
-
-            // Populate status info
-            const statusInfo = document.getElementById('status-info');
-            statusInfo.innerHTML = `
-                <div class="info-label">Namespace:</div>
-                <div>${resource.namespace || '-'}</div>
-                <div class="info-label">Phase:</div>
-                <div>${resource.status.phase || '-'}</div>
-                <div class="info-label">Ready:</div>
-                <div>${resource.status.ready || '-'}</div>
-                <div class="info-label">Health:</div>
-                <div><span class="health ${resource.health}">${resource.health}</span></div>
-                ${resource.status.message ? `
-                    <div class="info-label">Message:</div>
-                    <div>${resource.status.message}</div>
-                ` : ''}
-            `;
-
-            // Populate relationships
-            const relationshipsSection = document.getElementById('relationships-section');
-            let relationshipsHTML = '<h3>Relationships</h3>';
-
-            const relationshipTypes = [
-                { key: 'ownedBy', label: 'Owned By' },
-                { key: 'owns', label: 'Owns' },
-                { key: 'dependsOn', label: 'Depends On' },
-                { key: 'usedBy', label: 'Used By' },
-                { key: 'exposes', label: 'Exposes' },
-                { key: 'exposedBy', label: 'Exposed By' },
-                { key: 'routesTo', label: 'Routes To' },
-                { key: 'routedBy', label: 'Routed By' }
-            ];
-
-            relationshipTypes.forEach(({ key, label }) => {
-                const refs = resource.relationships[key];
-                if (refs && refs.length > 0) {
-                    relationshipsHTML += `
-                        <h4>${label}</h4>
-                        <ul class="relationship-list">
-                            ${refs.map(ref => `
-                                <li>
-                                    <a class="relationship-link" onclick="showResource('${ref.id}')">
-                                        ${ref.type}: ${ref.name}
-                                    </a>
-                                </li>
-                            `).join('')}
-                        </ul>
-                    `;
-                }
-            });
-
-            relationshipsSection.innerHTML = relationshipsHTML;
-
-            // Populate YAML
-            document.getElementById('yaml-content').textContent = resource.yaml || 'No YAML available';
-
-            // Show panel
-            document.getElementById('detail-panel').classList.add('visible');
-        }
-
-        // Close detail panel
-        function closeDetail() {
-            document.getElementById('detail-panel').classList.remove('visible');
-        }
-
-        // Switch tabs
-        function switchTab(tabName) {
-            // Update tab buttons
-            document.querySelectorAll('.tab').forEach(tab => {
-                tab.classList.remove('active');
-            });
-            event.target.classList.add('active');
-
-            // Update tab content
-            document.querySelectorAll('.tab-content').forEach(content => {
-                content.classList.remove('active');
-            });
-            document.getElementById(`${tabName}-tab`).classList.add('active');
-        }
-
-        // Start the application
-        connect();
-    </script>
+    // ---------- Init ----------
+    renderFilters(); updateStatCards(); renderResourceList(); connect();
+  </script>
 </body>
 </html>
