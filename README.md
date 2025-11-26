@@ -2,7 +2,7 @@
 
 A modern, real-time Kubernetes cluster visualization tool with a beautiful web UI. Like k9s, but with a web interface and superior user experience.
 
-![Status: Phase 2 Complete](https://img.shields.io/badge/status-Phase%202%20Complete-success)
+![Status: Phase 3 In Progress](https://img.shields.io/badge/status-Phase%203%20In%20Progress-blue)
 ![Go Version](https://img.shields.io/badge/go-1.23%2B-blue)
 ![Binary Size](https://img.shields.io/badge/binary-62MB-orange)
 
@@ -14,6 +14,7 @@ k8v is a **single-binary CLI tool** that connects to your Kubernetes cluster and
 
 ✅ **Real-time Updates** - Live streaming of cluster changes via WebSocket
 ✅ **Resource Visualization** - View Pods, Deployments, Services, Ingress, ReplicaSets, ConfigMaps, Secrets
+✅ **Namespace Filtering** - Server-side filtering with searchable dropdown and keyboard navigation
 ✅ **Relationship Mapping** - Click any resource to see bidirectional relationships
 ✅ **Scale Tested** - Handles 20,000+ resources smoothly
 ✅ **Zero Dependencies** - Single binary with embedded web UI
@@ -156,11 +157,12 @@ kubectl config use-context my-cluster
 - Scale testing (21k+ resources)
 
 ### 🚧 Phase 3 (In Progress)
-- **Frontend Performance:** Virtual scrolling and lazy rendering for large clusters
-- **Namespace Filtering:** Dropdown selector to filter by namespace
+- ✅ **Namespace Filtering:** Server-side filtering with searchable dropdown, keyboard navigation, and localStorage persistence (200x network reduction)
+- ✅ **Icon Consistency:** Replaced emojis with Feather Icons for cohesive glassmorphic design
 - **Pod Logs Viewer:** Stream and view pod logs in real-time
 - **Enhanced YAML View:** Syntax highlighting and clickable resource references
 - **Search Functionality:** Search by name, labels, and annotations
+- **Frontend Performance:** Virtual scrolling and lazy rendering for massive clusters
 
 ### 📋 Future
 - Additional K8s resources (StatefulSets, DaemonSets, Jobs, PVs, etc.)

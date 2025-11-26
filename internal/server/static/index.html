@@ -8,6 +8,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <!-- Feather Icons for consistent icon design -->
+  <script src="https://unpkg.com/feather-icons"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0a0a0a; color: #e0e0e0; overflow: hidden; }
@@ -219,7 +221,7 @@
           </div>
         </div>
         <div style="grid-column: 1 / -1; padding: 40px; text-align: center; color: #888;">
-          <div style="font-size: 48px; margin-bottom: 16px;">🚧</div>
+          <div style="margin-bottom: 16px;"><i data-feather="git-branch" style="width: 48px; height: 48px; stroke-width: 1.5;"></i></div>
           <h2 style="color: #C4F561; margin-bottom: 8px;">Topology View Coming Soon</h2>
           <p>Interactive resource relationship diagrams will be available in a future update.</p>
         </div>
@@ -229,7 +231,7 @@
 
   <!-- Events toggle button -->
   <button class="events-toggle" onclick="toggleEventsDrawer()" title="View Recent Events">
-    📋
+    <i data-feather="activity"></i>
     <span class="events-badge" id="events-badge" style="display: none;">0</span>
   </button>
 
@@ -249,8 +251,14 @@
       <button class="nav-tab" style="background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:8px;" onclick="closeDetail()">&times;</button>
     </div>
     <div class="panel-tabs">
-      <div class="tab active" onclick="switchTab('overview')">Overview</div>
-      <div class="tab" onclick="switchTab('yaml')">YAML</div>
+      <div class="tab active" onclick="switchTab('overview')">
+        <i data-feather="info" style="width: 16px; height: 16px; margin-right: 6px; vertical-align: middle;"></i>
+        Overview
+      </div>
+      <div class="tab" onclick="switchTab('yaml')">
+        <i data-feather="code" style="width: 16px; height: 16px; margin-right: 6px; vertical-align: middle;"></i>
+        YAML
+      </div>
     </div>
     <div class="panel-content">
       <div id="overview-tab" class="tab-content active">
@@ -569,7 +577,7 @@
         const empty = document.createElement('div');
         empty.innerHTML = `
           <div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: #666;">
-            <div style="font-size: 48px; margin-bottom: 16px;">📭</div>
+            <div style="margin-bottom: 16px;"><i data-feather="inbox" style="width: 48px; height: 48px; stroke-width: 1.5;"></i></div>
             <div style="font-size: 16px; margin-bottom: 8px;">No ${currentFilter}s found</div>
             <div style="font-size: 13px;">
               ${currentNamespace !== 'all' ? `in namespace "${currentNamespace}"` : 'in cluster'}
@@ -577,6 +585,8 @@
           </div>
         `;
         container.appendChild(empty);
+        // Re-render icons after adding dynamic content
+        feather.replace();
         return;
       }
 
@@ -803,6 +813,9 @@
     setTimeout(() => {
       connect();  // Connect after namespaces loaded
     }, 100);
+
+    // Render Feather icons
+    feather.replace();
   </script>
 </body>
 </html>
