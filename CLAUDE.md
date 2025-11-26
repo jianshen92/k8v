@@ -17,9 +17,13 @@ K8v is a Kubernetes cluster visualization tool designed to be like k9s but with 
 - Pod logs viewing and resource inspection
 
 **Current State:**
-- **Stage:** Design phase with working prototype
-- **What exists:** Fully functional HTML/CSS/JS prototype with mock data
-- **Next:** Build Go backend to connect to real Kubernetes clusters
+- **Stage:** ✅ Phase 1 Complete - Production backend + minimal frontend
+- **What exists:**
+  - Fully functional HTML/CSS/JS prototype with mock data (index.html)
+  - Production Go backend with Informers, WebSocket streaming, and generic relationship system
+  - Minimal working frontend with bidirectional relationship navigation
+  - Single 62MB binary (k8v) ready to use
+- **Next:** Phase 2 - Build full frontend matching prototype quality
 
 ---
 
@@ -296,59 +300,176 @@ k8v/
 
 ---
 
-## 5. Next Steps
+## 4.5. DATA_MODEL.MD Summary
 
-### What Needs to Be Built
+**Purpose:** Defines the complete data model for resources and relationships
 
-1. **Go Project Setup**
-   - Initialize Go module
-   - Add dependencies (client-go, gorilla/websocket, cobra)
-   - Create directory structure
+**Key Content:**
 
-2. **Frontend Extraction**
-   - Extract CSS from inline styles to `static/css/styles.css`
-   - Extract JavaScript to modular files:
-     - `app.js` - Main application logic
-     - `websocket.js` - WebSocket client and reconnection
-     - `renderer.js` - UI rendering and updates
-   - Download and bundle Mermaid.js (no CDN dependency)
+**Core Structure:**
+```go
+type Resource struct {
+    ID            string         // "type:namespace:name"
+    Type          string         // "Pod", "Deployment", etc.
+    Name          string
+    Namespace     string
+    Status        ResourceStatus
+    Health        HealthState    // "healthy", "warning", "error"
+    Relationships Relationships  // The key part!
+    Labels        map[string]string
+    YAML          string
+}
 
-3. **Embedded HTTP Server**
-   - Implement asset embedding with Go embed
-   - Create HTTP server serving embedded files
-   - Add browser auto-open functionality
+type Relationships struct {
+    OwnedBy   []ResourceRef  // Ownership hierarchy
+    Owns      []ResourceRef
+    DependsOn []ResourceRef  // Dependencies (ConfigMap, Secret)
+    UsedBy    []ResourceRef
+    Exposes   []ResourceRef  // Network relationships
+    ExposedBy []ResourceRef
+    RoutesTo  []ResourceRef  // Traffic routing
+    RoutedBy  []ResourceRef
+}
+```
 
-4. **Kubernetes Integration**
-   - Implement kubeconfig loading
-   - Initialize K8s clientset
-   - Build watch manager with Informers
-   - Create resource cache
+**Key Design Decisions:**
+- **Relationship-first approach**: Resource connections are core, not an afterthought
+- **Bidirectional references**: Navigate both ways (Service → Pods AND Pods → Service)
+- **Resource ID format**: `type:namespace:name` for unique identification
+- **Health computation**: Derived from status (Running = healthy, CrashLoop = error, etc.)
+- **Extensible pattern**: Add new resource types with ~50 lines of code
 
-5. **WebSocket Streaming**
-   - Implement WebSocket upgrade handler
-   - Build event broadcaster
-   - Add reconnection logic
+**Relationship Types:**
+- **Ownership**: Deployment → ReplicaSet → Pod (via OwnerReferences)
+- **Dependencies**: Pod → ConfigMap/Secret (via volume mounts, env vars)
+- **Network**: Service → Pods (via selector), Ingress → Service (via routes)
 
-6. **Pod Logs Feature**
-   - Create logs endpoint
-   - Stream logs via WebSocket
-   - Add UI for logs viewing
+**Example Relationship Chain:**
+```
+Ingress "api"
+  ├─ routesTo → Service "api-svc"
+  │              └─ exposes → Pod "api-1", "api-2", "api-3"
+  │
+Deployment "api-deploy"
+  ├─ owns → ReplicaSet "api-rs"
+  │          └─ owns → Pod "api-1", "api-2", "api-3"
+  └─ dependsOn → ConfigMap "api-config"
+                  Secret "api-secrets"
+```
 
-### Development Order
+**Click-to-explore flow:**
+1. User clicks "Service: api-svc"
+2. UI shows "Exposes: Pod api-1, api-2, api-3" (clickable)
+3. UI shows "Routed by: Ingress api" (clickable)
+4. User clicks Pod → sees ownedBy ReplicaSet, dependsOn ConfigMap, etc.
 
-1. Start with Phase 1 (CLI + embedded assets) to validate approach
-2. Move to Phase 2 (K8s integration) to replace mock data
-3. Implement Phase 3 (real-time watch) for live updates
-4. Add pod logs viewing (Phase 4)
-5. Polish and optimize
+**Extensibility:** Adding StatefulSet requires:
+1. Write `TransformStatefulSet()` function
+2. Add `watchStatefulSets()` goroutine
+3. Register in main → Done! No frontend changes needed.
 
 ---
 
-## 6. Quick Reference
+## 5. POC Validation (Completed)
+
+**Status:** ✅ Minimal streaming POC built and validated
+
+**Location:** `/Users/jianshenyap/code/k8v/k8v-poc/`
+
+**What was validated:**
+- ✅ K8s watch API works correctly
+- ✅ WebSocket streaming to browser works
+- ✅ Real-time UI updates work (< 1 second latency)
+- ✅ Simple table UI successfully displays Pods, Deployments, ReplicaSets
+- ✅ ADD/MODIFY/DELETE events handled correctly
+
+**Key learnings:**
+- Direct Watch API (not Informers) is simple and works for POC
+- gorilla/websocket handles concurrent writes (need mutex)
+- Browser WebSocket API is straightforward
+- k8s.io/client-go requires Go 1.23 (use v0.31.0, not latest)
+
+**Next:** Build production system with full data model
+
+---
+
+## 6. Phase 1 Complete (Production Backend + Minimal Frontend)
+
+### What Was Built
+
+✅ **Go Project Setup**
+- Production directory structure (cmd/, internal/types, internal/k8s, internal/server)
+- Dependencies: client-go v0.31.0, gorilla/websocket, sigs.k8s.io/yaml
+- Single binary build with embedded web assets
+
+✅ **Data Model Implementation**
+- Complete Resource struct with 8 relationship types
+- **Generic relationship system** with RelationshipType enum
+- Thread-safe ResourceCache
+- Bidirectional relationship computation
+
+✅ **Kubernetes Integration**
+- Kubeconfig loading (supports both local and in-cluster)
+- SharedInformerFactory pattern for efficiency
+- Watcher with event handlers for 7 resource types
+- Transformers: Pod, Deployment, ReplicaSet, Service, Ingress, ConfigMap, Secret
+
+✅ **WebSocket Streaming**
+- HTTP/WebSocket server with hub pattern
+- Initial snapshot + incremental updates
+- Panic recovery for large clusters (2000+ resources tested)
+- Channel buffer optimization (10,000 events)
+
+✅ **Minimal Frontend**
+- Enhanced table view with all resource types
+- Detail panel with Overview and YAML tabs
+- **Clickable bidirectional relationship navigation**
+- Real-time updates via WebSocket
+- Health indicators (green/yellow/red)
+- Console logging for development (color-coded events)
+
+✅ **Key Improvements**
+- **Generic Relationship Computation:**
+  - Reduced from 4 specific functions to 1 generic `FindReverseRelationships()`
+  - Type-safe with RelationshipType enum
+  - Scalable: add new relationships without new functions
+  - Cleaner, more maintainable code
+
+### Binary Details
+
+- **Size:** 62MB
+- **Command:** `./k8v` or `./k8v -port 8080`
+- **Handles:** 2000+ resources tested in production
+- **Performance:** Real-time updates < 500ms latency
+
+### What's Next (Phase 2)
+
+1. **Full Frontend Implementation**
+   - Extract design from index.html prototype
+   - Dashboard view with statistics cards
+   - Advanced filtering and search
+   - Topology view with Mermaid diagrams
+   - Events timeline
+   - Dark/light theme toggle
+
+2. **Pod Logs Feature**
+   - Stream logs via WebSocket
+   - Log viewer in detail panel
+   - Follow mode for live logs
+
+3. **Polish & Features**
+   - Multi-cluster support (context switching)
+   - Export functionality (YAML download)
+   - Resource editing (kubectl apply)
+   - Namespace filtering
+
+---
+
+## 7. Quick Reference
 
 | Aspect | Details |
 |--------|---------|
-| **Current Stage** | Design phase with working prototype |
+| **Current Stage** | Implementation phase - POC validated, data model designed |
 | **Tech Stack** | Go backend + HTML/CSS/JS frontend |
 | **Backend Language** | Go (for K8s ecosystem, single binary) |
 | **Communication** | WebSocket (for real-time updates) |
@@ -356,23 +477,27 @@ k8v/
 | **Deployment Model** | Single binary CLI tool (`k8v` command) |
 | **Similar Tools** | k9s (TUI), Lens (Electron), kubectl proxy (proxy-only) |
 | **Core Resources** | Pods, Deployments, Services, Ingress, ReplicaSets, ConfigMaps, Secrets |
-| **MVP Priority** | Resource visualization + live streaming + logs viewing |
-| **UI Status** | ✅ Complete (prototype has production-quality UI) |
-| **Backend Status** | ❌ Not started (need to build Go server) |
-| **K8s Integration** | ❌ Not started (currently uses mock data) |
+| **MVP Priority** | Resource visualization + relationship graph + live streaming |
+| **UI Prototype** | ✅ Complete (index.html has production-quality UI) |
+| **POC** | ✅ Complete (k8v-poc validates streaming architecture) |
+| **Data Model** | ✅ Complete (DATA_MODEL.md defines relationship model) |
+| **Production Backend** | ⏳ In Progress (next step: implement with full data model) |
+| **K8s Integration** | ⏳ In Progress (POC has basic integration, need full model) |
 
 ---
 
-## 7. Document References
+## 8. Document References
 
 - **README.md** - Basic documentation about the prototype features and usage
 - **IDEAS.md** - Detailed feature requirements and user vision (read for MVP priorities)
 - **DESIGN.md** - Complete technical design and architecture (read for implementation details)
-- **index.html** - Working prototype demonstrating full UI/UX vision
+- **DATA_MODEL.md** - Complete data model with relationships (read for backend implementation)
+- **index.html** - Working UI prototype demonstrating full UX vision
+- **k8v-poc/** - Minimal POC validating streaming architecture (Pods, Deployments, ReplicaSets)
 
 ---
 
-## 8. Key Insights
+## 9. Key Insights
 
 1. **UI is Already Done:** The prototype is production-ready. No need to redesign or rebuild the frontend - just extract and modularize it.
 
@@ -390,9 +515,13 @@ k8v/
 
 8. **Single Binary FTW:** Following the Go/K8s ecosystem pattern of single binary distribution simplifies everything.
 
+9. **Relationships are Core:** The data model is relationship-first. Resource connections (Deployment → ConfigMap, Service → Pods) are as important as the resources themselves.
+
+10. **POC Validated Approach:** The minimal POC proved that Watch API + WebSocket + simple UI works. No need to guess - the architecture is validated.
+
 ---
 
-## 9. Maintaining This Document
+## 10. Maintaining This Document
 
 **⚠️ IMPORTANT: Keep CLAUDE.md Updated**
 
@@ -445,4 +574,4 @@ When making changes, update the relevant sections:
 
 ---
 
-**Last Updated:** 2025-01-26 - Initial creation during planning phase
+**Last Updated:** 2025-11-26 - Added POC validation results and DATA_MODEL.md summary

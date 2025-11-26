@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>K8V - Kubernetes Visualizer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #1a1a1a;
+            color: #e0e0e0;
+            padding: 20px;
+        }
+
+        header {
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            font-size: 24px;
+            margin-bottom: 10px;
+        }
+
+        .stats {
+            color: #888;
+            font-size: 14px;
+        }
+
+        /* Table styles */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: #2a2a2a;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        thead {
+            background: #333;
+        }
+
+        th {
+            padding: 12px;
+            text-align: left;
+            font-weight: 600;
+            border-bottom: 2px solid #444;
+        }
+
+        tbody tr {
+            border-bottom: 1px solid #333;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+
+        tbody tr:hover {
+            background: #353535;
+        }
+
+        td {
+            padding: 12px;
+        }
+
+        /* Health indicators */
+        .health {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            font-weight: 600;
+        }
+
+        .health.healthy {
+            background: #2d5f2e;
+            color: #81c784;
+        }
+
+        .health.warning {
+            background: #5f4c2d;
+            color: #ffb74d;
+        }
+
+        .health.error {
+            background: #5f2d2d;
+            color: #e57373;
+        }
+
+        .health.unknown {
+            background: #3a3a3a;
+            color: #999;
+        }
+
+        /* Detail panel */
+        #detail-panel {
+            position: fixed;
+            right: 0;
+            top: 0;
+            bottom: 0;
+            width: 600px;
+            background: #2a2a2a;
+            box-shadow: -4px 0 12px rgba(0,0,0,0.5);
+            transform: translateX(100%);
+            transition: transform 0.3s ease;
+            overflow-y: auto;
+            z-index: 1000;
+        }
+
+        #detail-panel.visible {
+            transform: translateX(0);
+        }
+
+        .panel-header {
+            background: #333;
+            padding: 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #444;
+        }
+
+        .panel-header h2 {
+            font-size: 18px;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: #e0e0e0;
+            font-size: 24px;
+            cursor: pointer;
+            padding: 0;
+            width: 32px;
+            height: 32px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 4px;
+        }
+
+        .close-btn:hover {
+            background: #444;
+        }
+
+        .panel-tabs {
+            display: flex;
+            background: #2a2a2a;
+            border-bottom: 1px solid #444;
+        }
+
+        .tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border-bottom: 2px solid transparent;
+            transition: all 0.2s;
+        }
+
+        .tab:hover {
+            background: #333;
+        }
+
+        .tab.active {
+            border-bottom-color: #4a9eff;
+            color: #4a9eff;
+        }
+
+        .panel-content {
+            padding: 20px;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .section {
+            margin-bottom: 24px;
+        }
+
+        .section h3 {
+            font-size: 16px;
+            margin-bottom: 12px;
+            color: #4a9eff;
+        }
+
+        .section h4 {
+            font-size: 14px;
+            margin-top: 16px;
+            margin-bottom: 8px;
+            color: #999;
+        }
+
+        .info-grid {
+            display: grid;
+            grid-template-columns: 120px 1fr;
+            gap: 8px;
+        }
+
+        .info-label {
+            color: #888;
+        }
+
+        .relationship-list {
+            list-style: none;
+        }
+
+        .relationship-list li {
+            padding: 8px;
+            margin-bottom: 4px;
+            background: #333;
+            border-radius: 4px;
+        }
+
+        .relationship-link {
+            color: #4a9eff;
+            text-decoration: none;
+            cursor: pointer;
+        }
+
+        .relationship-link:hover {
+            text-decoration: underline;
+        }
+
+        .empty-state {
+            color: #666;
+            font-style: italic;
+        }
+
+        pre {
+            background: #1a1a1a;
+            padding: 16px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 12px;
+            line-height: 1.5;
+        }
+
+        code {
+            color: #81c784;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>K8V - Kubernetes Cluster Visualizer</h1>
+        <div class="stats">
+            <span id="resource-count">0 resources</span> |
+            <span id="connection-status">Connecting...</span>
+        </div>
+    </header>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Type</th>
+                <th>Namespace</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Health</th>
+            </tr>
+        </thead>
+        <tbody id="resources"></tbody>
+    </table>
+
+    <div id="detail-panel">
+        <div class="panel-header">
+            <h2 id="detail-title">Resource Details</h2>
+            <button class="close-btn" onclick="closeDetail()">&times;</button>
+        </div>
+
+        <div class="panel-tabs">
+            <div class="tab active" onclick="switchTab('overview')">Overview</div>
+            <div class="tab" onclick="switchTab('yaml')">YAML</div>
+        </div>
+
+        <div class="panel-content">
+            <div id="overview-tab" class="tab-content active">
+                <div class="section">
+                    <h3>Status</h3>
+                    <div class="info-grid" id="status-info"></div>
+                </div>
+
+                <div class="section" id="relationships-section">
+                    <h3>Relationships</h3>
+                </div>
+            </div>
+
+            <div id="yaml-tab" class="tab-content">
+                <pre><code id="yaml-content"></code></pre>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // State management
+        const resources = {}; // resourceId → Resource object
+        let ws = null;
+
+        // WebSocket connection
+        let snapshotComplete = false;
+        let snapshotCount = 0;
+
+        function connect() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws`;
+
+            console.log('%c🚀 Connecting to K8V...', 'color: #4a9eff; font-size: 14px; font-weight: bold');
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = () => {
+                console.log('%c✓ WebSocket connected - receiving initial snapshot...', 'color: #81c784; font-weight: bold');
+                document.getElementById('connection-status').textContent = 'Connected';
+                snapshotComplete = false;
+                snapshotCount = 0;
+            };
+
+            ws.onmessage = (event) => {
+                const msg = JSON.parse(event.data);
+
+                // Track snapshot completion
+                if (!snapshotComplete && msg.type === 'ADDED') {
+                    snapshotCount++;
+                    // Assume snapshot is complete after 1 second of no new ADDED events
+                    clearTimeout(window.snapshotTimer);
+                    window.snapshotTimer = setTimeout(() => {
+                        if (!snapshotComplete) {
+                            snapshotComplete = true;
+                            console.log(
+                                `%c✓ Initial snapshot complete: ${snapshotCount} resources loaded`,
+                                'color: #81c784; font-weight: bold; font-size: 12px'
+                            );
+                            console.log('%c👀 Watching for live updates...', 'color: #4a9eff; font-style: italic');
+                        }
+                    }, 1000);
+                }
+
+                handleResourceEvent(msg);
+            };
+
+            ws.onerror = (error) => {
+                console.error('%c✗ WebSocket error:', 'color: #e57373; font-weight: bold', error);
+                document.getElementById('connection-status').textContent = 'Error';
+            };
+
+            ws.onclose = () => {
+                console.log('%c⚠ WebSocket closed - reconnecting in 3s...', 'color: #ffb74d');
+                document.getElementById('connection-status').textContent = 'Disconnected';
+                // Attempt to reconnect after 3 seconds
+                setTimeout(connect, 3000);
+            };
+        }
+
+        // Handle resource events
+        function handleResourceEvent(event) {
+            const eventStyle = event.type === 'ADDED' ? 'color: #81c784' :
+                             event.type === 'MODIFIED' ? 'color: #ffb74d' :
+                             'color: #e57373';
+
+            console.log(
+                `%c[${event.type}] %c${event.resource.type}:%c${event.resource.namespace}/%c${event.resource.name} %c(${event.resource.health})`,
+                eventStyle + '; font-weight: bold',
+                'color: #4a9eff',
+                'color: #999',
+                'color: #fff',
+                'color: #999'
+            );
+
+            if (event.type === 'DELETED') {
+                delete resources[event.resource.id];
+                removeTableRow(event.resource.id);
+            } else {
+                resources[event.resource.id] = event.resource;
+                updateTableRow(event.resource);
+
+                // Log relationships for ADDED events
+                if (event.type === 'ADDED' && Object.keys(event.resource.relationships).length > 0) {
+                    const relSummary = [];
+                    for (const [relType, refs] of Object.entries(event.resource.relationships)) {
+                        if (refs && refs.length > 0) {
+                            relSummary.push(`${relType}(${refs.length})`);
+                        }
+                    }
+                    if (relSummary.length > 0) {
+                        console.log(`  └─ Relationships: ${relSummary.join(', ')}`);
+                    }
+                }
+            }
+
+            updateStats();
+        }
+
+        // Update table row
+        function updateTableRow(resource) {
+            const tbody = document.getElementById('resources');
+            let row = document.getElementById(`row-${resource.id}`);
+
+            if (!row) {
+                row = tbody.insertRow();
+                row.id = `row-${resource.id}`;
+                row.onclick = () => showResource(resource.id);
+            }
+
+            row.innerHTML = `
+                <td>${resource.type}</td>
+                <td>${resource.namespace || '-'}</td>
+                <td>${resource.name}</td>
+                <td>${resource.status.phase || '-'} ${resource.status.ready || ''}</td>
+                <td><span class="health ${resource.health}">${resource.health}</span></td>
+            `;
+        }
+
+        // Remove table row
+        function removeTableRow(id) {
+            const row = document.getElementById(`row-${id}`);
+            if (row) {
+                row.remove();
+            }
+        }
+
+        // Update statistics
+        function updateStats() {
+            const count = Object.keys(resources).length;
+            document.getElementById('resource-count').textContent = `${count} resources`;
+        }
+
+        // Show resource detail panel
+        function showResource(resourceId) {
+            const resource = resources[resourceId];
+            if (!resource) return;
+
+            // Set title
+            document.getElementById('detail-title').textContent =
+                `${resource.type}: ${resource.name}`;
+
+            // Populate status info
+            const statusInfo = document.getElementById('status-info');
+            statusInfo.innerHTML = `
+                <div class="info-label">Namespace:</div>
+                <div>${resource.namespace || '-'}</div>
+                <div class="info-label">Phase:</div>
+                <div>${resource.status.phase || '-'}</div>
+                <div class="info-label">Ready:</div>
+                <div>${resource.status.ready || '-'}</div>
+                <div class="info-label">Health:</div>
+                <div><span class="health ${resource.health}">${resource.health}</span></div>
+                ${resource.status.message ? `
+                    <div class="info-label">Message:</div>
+                    <div>${resource.status.message}</div>
+                ` : ''}
+            `;
+
+            // Populate relationships
+            const relationshipsSection = document.getElementById('relationships-section');
+            let relationshipsHTML = '<h3>Relationships</h3>';
+
+            const relationshipTypes = [
+                { key: 'ownedBy', label: 'Owned By' },
+                { key: 'owns', label: 'Owns' },
+                { key: 'dependsOn', label: 'Depends On' },
+                { key: 'usedBy', label: 'Used By' },
+                { key: 'exposes', label: 'Exposes' },
+                { key: 'exposedBy', label: 'Exposed By' },
+                { key: 'routesTo', label: 'Routes To' },
+                { key: 'routedBy', label: 'Routed By' }
+            ];
+
+            relationshipTypes.forEach(({ key, label }) => {
+                const refs = resource.relationships[key];
+                if (refs && refs.length > 0) {
+                    relationshipsHTML += `
+                        <h4>${label}</h4>
+                        <ul class="relationship-list">
+                            ${refs.map(ref => `
+                                <li>
+                                    <a class="relationship-link" onclick="showResource('${ref.id}')">
+                                        ${ref.type}: ${ref.name}
+                                    </a>
+                                </li>
+                            `).join('')}
+                        </ul>
+                    `;
+                }
+            });
+
+            relationshipsSection.innerHTML = relationshipsHTML;
+
+            // Populate YAML
+            document.getElementById('yaml-content').textContent = resource.yaml || 'No YAML available';
+
+            // Show panel
+            document.getElementById('detail-panel').classList.add('visible');
+        }
+
+        // Close detail panel
+        function closeDetail() {
+            document.getElementById('detail-panel').classList.remove('visible');
+        }
+
+        // Switch tabs
+        function switchTab(tabName) {
+            // Update tab buttons
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.classList.remove('active');
+            });
+            event.target.classList.add('active');
+
+            // Update tab content
+            document.querySelectorAll('.tab-content').forEach(content => {
+                content.classList.remove('active');
+            });
+            document.getElementById(`${tabName}-tab`).classList.add('active');
+        }
+
+        // Start the application
+        connect();
+    </script>
+</body>
+</html>
