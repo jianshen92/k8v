@@ -73,6 +73,17 @@
     .dropdown-option.highlighted { background: rgba(196,245,97,0.15); color: #fff; border: 1px solid rgba(196,245,97,0.3); }
     .dropdown-option.active { background: #C4F561; color: #000; font-weight: 600; }
 
+    /* Search Filter (Vim-style) */
+    .search-filter { grid-column: 1 / -1; margin-bottom: 12px; }
+    .search-trigger { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); color: #666; padding: 10px 16px; border-radius: 12px; font-family: 'Space Grotesk', sans-serif; font-size: 13px; cursor: pointer; transition: all 0.25s; display: flex; align-items: center; }
+    .search-trigger:hover { background: rgba(255,255,255,0.08); border-color: rgba(255,255,255,0.12); color: #888; }
+    .search-placeholder kbd { background: rgba(196,245,97,0.15); color: #C4F561; padding: 2px 8px; border-radius: 4px; font-family: 'Space Grotesk', monospace; font-size: 12px; font-weight: 600; margin: 0 4px; border: 1px solid rgba(196,245,97,0.3); }
+    .search-active { display: flex; align-items: center; gap: 8px; position: relative; }
+    .search-input { flex: 1; background: rgba(255,255,255,0.05); border: 1px solid #C4F561; color: #fff; padding: 10px 16px; border-radius: 12px; font-family: 'Space Grotesk', sans-serif; font-size: 13px; outline: none; transition: all 0.25s; box-shadow: 0 0 0 3px rgba(196,245,97,0.1); }
+    .search-input::placeholder { color: #666; }
+    .search-clear { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); color: #888; width: 36px; height: 36px; border-radius: 8px; display: flex; align-items: center; justify-content: center; cursor: pointer; transition: all 0.25s; flex-shrink: 0; }
+    .search-clear:hover { background: rgba(244,67,54,0.2); border-color: rgba(244,67,54,0.4); color: #f44336; }
+
     /* Resource list */
     .resource-list { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 10px; margin-bottom: 20px; }
 
@@ -204,6 +215,27 @@
           </div>
         </div>
 
+        <!-- Search Filter (Vim-style activation) -->
+        <div class="search-filter" id="search-filter-container">
+          <div class="filter-label">Search Resources</div>
+          <div class="search-trigger" id="search-trigger">
+            <i data-feather="search" style="width: 16px; height: 16px; margin-right: 8px;"></i>
+            <span class="search-placeholder">Press <kbd>/</kbd> to search by name</span>
+          </div>
+          <div class="search-active" id="search-active" style="display: none;">
+            <input
+              type="text"
+              class="search-input"
+              id="search-input"
+              placeholder="Type to filter by name... (Esc to clear)"
+              autocomplete="off"
+            />
+            <button class="search-clear" id="search-clear" title="Clear search (Esc)">
+              <i data-feather="x" style="width: 16px; height: 16px;"></i>
+            </button>
+          </div>
+        </div>
+
         <!-- Resource Type Filters -->
         <div class="resource-filter">
           <div class="filter-label">Resource Type</div>
@@ -284,6 +316,9 @@
     let currentNamespace = localStorage.getItem('k8v-namespace') || 'all'; // namespace filter
     let availableNamespaces = []; // fetched from API
     let highlightedNamespaceIndex = -1; // for keyboard navigation
+    // Search filter state
+    let searchQuery = ''; // Current search query
+    let searchActive = false; // Whether search UI is active
     const events = []; // recent update events
     const MAX_EVENTS = 100;
     const resourceTypes = ['Pod','Deployment','ReplicaSet','Service','Ingress','ConfigMap','Secret'];
@@ -506,6 +541,134 @@
       connect();
     }
 
+    // ---------- Search Filter ----------
+
+    /**
+     * Activates search mode - shows input and focuses it
+     */
+    function activateSearch() {
+      // Don't activate if namespace dropdown is open
+      const namespaceMenu = document.getElementById('namespace-menu');
+      if (namespaceMenu && namespaceMenu.style.display !== 'none') {
+        return;
+      }
+
+      // Don't activate if user is focused on an input
+      const activeElement = document.activeElement;
+      if (activeElement && (activeElement.tagName === 'TEXTAREA' ||
+          activeElement.tagName === 'INPUT' ||
+          activeElement.isContentEditable)) {
+        return;
+      }
+
+      searchActive = true;
+      document.getElementById('search-trigger').style.display = 'none';
+      document.getElementById('search-active').style.display = 'flex';
+      const input = document.getElementById('search-input');
+      input.focus();
+
+      // Re-render icons (for X button)
+      feather.replace();
+    }
+
+    /**
+     * Deactivates search mode - hides input, shows trigger
+     */
+    function deactivateSearch() {
+      searchActive = false;
+      searchQuery = '';
+      document.getElementById('search-trigger').style.display = 'flex';
+      document.getElementById('search-active').style.display = 'none';
+      document.getElementById('search-input').value = '';
+
+      // Re-render to show all resources
+      renderResourceList();
+    }
+
+    /**
+     * Clears search and exits search mode
+     */
+    function clearSearch() {
+      deactivateSearch();
+    }
+
+    /**
+     * Handles search input changes
+     */
+    function handleSearchInput(event) {
+      searchQuery = event.target.value.toLowerCase().trim();
+      renderResourceList();
+    }
+
+    /**
+     * Global keyboard handler for vim-style activation
+     */
+    function handleGlobalKeydown(event) {
+      // Ignore if user is typing in an input field
+      const activeElement = document.activeElement;
+      const isInputFocused = activeElement && (
+        activeElement.tagName === 'INPUT' ||
+        activeElement.tagName === 'TEXTAREA' ||
+        activeElement.isContentEditable
+      );
+
+      // Handle '/' key for activation
+      if (event.key === '/' && !isInputFocused) {
+        event.preventDefault();
+        activateSearch();
+        return;
+      }
+
+      // Handle Escape key (priority order)
+      if (event.key === 'Escape') {
+        // 1. Close namespace dropdown if open
+        const namespaceMenu = document.getElementById('namespace-menu');
+        if (namespaceMenu && namespaceMenu.style.display !== 'none') {
+          closeNamespaceDropdown();
+          return;
+        }
+
+        // 2. Close detail panel if open
+        const detailPanel = document.getElementById('detail-panel');
+        if (detailPanel && detailPanel.classList.contains('visible')) {
+          closeDetail();
+          return;
+        }
+
+        // 3. Close events drawer if open
+        if (eventsDrawerOpen) {
+          toggleEventsDrawer();
+          return;
+        }
+
+        // 4. Clear search if active
+        if (searchActive) {
+          clearSearch();
+          return;
+        }
+      }
+    }
+
+    /**
+     * Setup search filter event listeners
+     */
+    function setupSearchFilter() {
+      // Click trigger to activate
+      const trigger = document.getElementById('search-trigger');
+      trigger.addEventListener('click', activateSearch);
+
+      // Search input handling
+      const input = document.getElementById('search-input');
+      input.addEventListener('input', handleSearchInput);
+
+      // Clear button
+      const clearBtn = document.getElementById('search-clear');
+      clearBtn.addEventListener('click', clearSearch);
+
+      // Global keyboard listener
+      document.addEventListener('keydown', handleGlobalKeydown);
+    }
+
     // ---------- Stats ----------
     function updateStatCards() {
       const counts = { total: 0 };
@@ -570,20 +733,37 @@
     function renderResourceList() {
       const container = document.getElementById('resource-list');
       container.innerHTML = '';
+
+      // Combined filter: resource type AND search query
       const list = Object.values(resources)
-        .filter(r => r.type === currentFilter)
+        .filter(r => {
+          // Filter by resource type
+          if (r.type !== currentFilter) return false;
+
+          // Filter by search query (name only)
+          if (searchQuery && !r.name.toLowerCase().includes(searchQuery)) {
+            return false;
+          }
+
+          return true;
+        })
         .sort((a,b) => a.name.localeCompare(b.name));
 
       // Show empty state if no resources
       if (list.length === 0) {
         const empty = document.createElement('div');
+        const emptyMessage = searchQuery
+          ? `No ${currentFilter}s matching "${searchQuery}"`
+          : `No ${currentFilter}s found`;
+        const emptyDetail = currentNamespace !== 'all'
+          ? `in namespace "${currentNamespace}"`
+          : 'in cluster';
+
         empty.innerHTML = `
           <div style="grid-column: 1 / -1; text-align: center; padding: 60px 20px; color: #666;">
             <div style="margin-bottom: 16px;"><i data-feather="inbox" style="width: 48px; height: 48px; stroke-width: 1.5;"></i></div>
-            <div style="font-size: 16px; margin-bottom: 8px;">No ${currentFilter}s found</div>
-            <div style="font-size: 13px;">
-              ${currentNamespace !== 'all' ? `in namespace "${currentNamespace}"` : 'in cluster'}
-            </div>
+            <div style="font-size: 16px; margin-bottom: 8px;">${emptyMessage}</div>
+            <div style="font-size: 13px;">${emptyDetail}</div>
           </div>
         `;
         container.appendChild(empty);
@@ -613,8 +793,10 @@
       const resource = resources[resourceId];
       if (!resource) return;
 
-      // Check if resource matches current filter
-      const matchesFilter = resource.type === currentFilter;
+      // Check if resource matches current filters (type AND search)
+      const matchesTypeFilter = resource.type === currentFilter;
+      const matchesSearchFilter = !searchQuery || resource.name.toLowerCase().includes(searchQuery);
+      const matchesFilter = matchesTypeFilter && matchesSearchFilter;
 
       if (!matchesFilter) {
         // Resource doesn't match filter, remove it if it exists
@@ -631,7 +813,11 @@
       } else if (eventType === 'ADDED') {
         // Find correct position and insert
         const allVisible = Object.values(resources)
-          .filter(r => r.type === currentFilter)
+          .filter(r => {
+            if (r.type !== currentFilter) return false;
+            if (searchQuery && !r.name.toLowerCase().includes(searchQuery)) return false;
+            return true;
+          })
           .sort((a,b) => a.name.localeCompare(b.name));
 
         const index = allVisible.findIndex(r => r.id === resourceId);
@@ -811,6 +997,7 @@
     updateStatCards();
     renderResourceList();
     setupNamespaceDropdown();  // Setup dropdown event listeners
+    setupSearchFilter();  // Setup search filter event listeners
     fetchNamespaces();  // Fetch namespaces first
     setTimeout(() => {
       connect();  // Connect after namespaces loaded
