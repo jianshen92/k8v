@@ -101,6 +101,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	if namespace == "" || namespace == "all" {
 		namespace = "" // Empty string = all namespaces
 	}
+	log.Printf("New WebSocket connection with namespace filter: '%s'", namespace)
 
 	client := &Client{
 		conn:      conn,
@@ -114,6 +115,14 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Send initial snapshot of resources (filtered by namespace) synchronously before starting pumps
 	snapshot := s.watcher.GetSnapshotFiltered(namespace)
 	log.Printf("Sending filtered snapshot of %d resources (namespace=%s) to new client", len(snapshot), namespace)
+
+	// Log first few resources in snapshot for debugging
+	if len(snapshot) > 0 && len(snapshot) <= 10 {
+		log.Printf("Snapshot resources:")
+		for _, event := range snapshot {
+			log.Printf("  - %s/%s (type:%s)", event.Resource.Namespace, event.Resource.Name, event.Resource.Type)
+		}
+	}
 
 	// Send snapshot directly without using the channel to avoid race condition
 	batchSize := 1000

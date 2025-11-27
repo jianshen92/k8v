@@ -324,24 +324,49 @@
     const resourceTypes = ['Pod','Deployment','ReplicaSet','Service','Ingress','ConfigMap','Secret'];
 
     // ---------- WebSocket ----------
+    let reconnectTimeout = null;  // Track reconnect timeout
+    let isManualReconnect = false;  // Flag for manual reconnections
+    let wsConnectionId = 0;  // Track active connection ID
+
     function connect() {
+      // Increment connection ID to invalidate old handlers
+      const myConnectionId = ++wsConnectionId;
+
+      console.log(`[WS] Creating connection #${myConnectionId} for namespace: ${currentNamespace}`);
+
       const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
       const nsParam = currentNamespace === 'all' ? '' : `?namespace=${currentNamespace}`;
       const wsUrl = `${protocol}//${window.location.host}/ws${nsParam}`;
       ws = new WebSocket(wsUrl);
+
       ws.onopen = () => {
+        // Check if this is still the active connection
+        if (myConnectionId !== wsConnectionId) {
+          console.log(`[WS] Connection #${myConnectionId} opened but is stale (current: ${wsConnectionId}), closing`);
+          ws.close();
+          return;
+        }
+        console.log(`[WS] Connection #${myConnectionId} opened successfully`);
         document.getElementById('connection-status').textContent = `Connected (${currentNamespace === 'all' ? 'All Namespaces' : currentNamespace})`;
         snapshotComplete = false;
         snapshotCount = 0;
+        isManualReconnect = false;
       };
+
       ws.onmessage = (event) => {
+        // Check if this is still the active connection
+        if (myConnectionId !== wsConnectionId) {
+          console.log(`[WS] Connection #${myConnectionId} received message but is stale (current: ${wsConnectionId}), ignoring`);
+          return;
+        }
+
         const msg = JSON.parse(event.data);
         if (!snapshotComplete && msg.type === 'ADDED') {
-          snapshotCount++; clearTimeout(window.snapshotTimer);
+          snapshotCount++;
+          clearTimeout(window.snapshotTimer);
           window.snapshotTimer = setTimeout(() => {
             if (!snapshotComplete) {
               snapshotComplete = true;
-              // Detect deleted namespace (snapshot complete but no resources)
               if (snapshotCount === 0 && currentNamespace !== 'all') {
                 console.warn(`No resources found in namespace "${currentNamespace}", switching to "all"`);
                 setNamespace('all');
@@ -351,8 +376,28 @@
         }
         handleResourceEvent(msg);
       };
-      ws.onerror = () => { document.getElementById('connection-status').textContent = 'Error'; };
-      ws.onclose = () => { document.getElementById('connection-status').textContent = 'Disconnected'; setTimeout(connect, 2000); };
+
+      ws.onerror = () => {
+        if (myConnectionId !== wsConnectionId) {
+          return;
+        }
+        document.getElementById('connection-status').textContent = 'Error';
+      };
+
+      ws.onclose = () => {
+        // Check if this is still the active connection
+        if (myConnectionId !== wsConnectionId) {
+          console.log(`[WS] Connection #${myConnectionId} closed but is stale (current: ${wsConnectionId}), ignoring`);
+          return;
+        }
+        console.log(`[WS] Connection #${myConnectionId} closed`);
+        document.getElementById('connection-status').textContent = 'Disconnected';
+        // Only auto-reconnect if this wasn't a manual disconnect
+        if (!isManualReconnect) {
+          console.log(`[WS] Scheduling auto-reconnect in 2s`);
+          reconnectTimeout = setTimeout(connect, 2000);
+        }
+      };
     }
 
     // ---------- Filters ----------
@@ -525,8 +570,20 @@
     }
 
     function reconnectWithNamespace() {
-      if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.close();
+      // Cancel any pending auto-reconnect
+      if (reconnectTimeout) {
+        clearTimeout(reconnectTimeout);
+        reconnectTimeout = null;
+      }
+
+      // Set flag to prevent auto-reconnect when we manually close
+      isManualReconnect = true;
+
+      // Close existing connection if open
+      if (ws) {
+        if (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING) {
+          ws.close();
+        }
       }
 
       // Clear state
