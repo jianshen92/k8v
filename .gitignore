@@ -1,2 +1,2 @@
-# k8v binary
-k8v
+# k8v binary at repo root (but not e.g. cmd/k8v)
+/k8v
