@@ -88,7 +88,7 @@ k8v (CLI binary)
   │   └── Resource Transformers (7 resource types)
   ↓
   └── Web UI (embedded in binary)
-      ├── HTML/CSS/JS (no frameworks)
+      ├── Modular ES6 architecture (7 modules)
       ├── Incremental DOM updates
       └── WebSocket client
 ```
@@ -97,7 +97,8 @@ k8v (CLI binary)
 
 - **Backend:** Go 1.23+ with `client-go` v0.31.0
 - **Communication:** WebSocket (bidirectional real-time updates)
-- **Frontend:** Pure HTML/CSS/JavaScript (no build step required)
+- **Frontend:** Modular ES6 JavaScript (config, state, ws, app, dropdown components)
+- **UI Framework:** None - Pure HTML/CSS/JS (no build step required)
 - **Authentication:** Uses your local kubeconfig (supports in-cluster mode too)
 - **Deployment:** Single binary with embedded assets
 

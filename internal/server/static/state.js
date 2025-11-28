@@ -20,6 +20,7 @@ export function createInitialState() {
       activeMainTab: 'dashboard',
       activeDetailTab: 'overview',
       detailResourceId: null,
+      detailFullscreen: false,
     },
     ws: {
       connectionId: 0,

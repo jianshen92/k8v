@@ -113,7 +113,9 @@
   <div id="events-drawer">
     <div class="events-drawer-header">
       <h2>Recent Events</h2>
-      <button class="nav-tab" id="events-close" style="background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:8px;">&times;</button>
+      <button class="nav-tab" id="events-close" title="Close" style="background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:8px;">
+        <i data-feather="x"></i>
+      </button>
     </div>
     <div class="events-drawer-content" id="events"></div>
   </div>
@@ -122,7 +124,14 @@
   <div id="detail-panel">
     <div class="detail-header">
       <h2 id="detail-title">Resource Details</h2>
-      <button class="nav-tab" id="detail-close" style="background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:8px;">&times;</button>
+      <div style="display: flex; gap: 8px;">
+        <button class="nav-tab" id="detail-fullscreen" title="Toggle Fullscreen" style="background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:8px;">
+          <i data-feather="maximize" id="fullscreen-icon"></i>
+        </button>
+        <button class="nav-tab" id="detail-close" title="Close" style="background:transparent;border:1px solid rgba(255,255,255,0.1);border-radius:8px;">
+          <i data-feather="x"></i>
+        </button>
+      </div>
     </div>
     <div class="panel-tabs">
       <div class="tab active" data-tab="overview">

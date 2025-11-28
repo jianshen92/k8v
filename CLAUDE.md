@@ -81,9 +81,10 @@ The prototype (`index.html`) is a **complete, production-ready frontend** that d
 
 **Technology Stack:**
 - Pure HTML/CSS/JavaScript (no framework dependencies)
-- Mermaid.js for topology diagrams
+- ES6 modules for code organization
+- Feather Icons for consistent iconography
 - Google Fonts (Space Grotesk, Inter)
-- Self-contained single-file application
+- Modular architecture with separation of concerns
 
 ### Strengths
 
@@ -221,13 +222,16 @@ k8v/
 ├── cmd/k8v/main.go              # CLI entry point
 ├── internal/
 │   ├── server/                   # HTTP/WebSocket server
+│   │   ├── static/               # Frontend assets (embedded)
+│   │   │   ├── index.html        # HTML structure
+│   │   │   ├── style.css         # Styles
+│   │   │   ├── app.js            # Main application logic
+│   │   │   ├── config.js         # Configuration constants
+│   │   │   ├── state.js          # State management
+│   │   │   ├── ws.js             # WebSocket connection management
+│   │   │   └── dropdown.js       # Reusable dropdown component
 │   ├── k8s/                      # K8s client, watcher, cache
 │   └── browser/                  # Cross-platform browser launcher
-├── web/                          # Frontend assets (extracted from prototype)
-│   ├── index.html
-│   ├── static/css/
-│   ├── static/js/
-│   └── embed.go                  # Go embed directives
 ├── pkg/types/                    # Shared types
 └── scripts/                      # Build scripts
 ```
@@ -712,6 +716,105 @@ const wsUrl = `/ws${params.length > 0 ? '?' + params.join('&') : ''}`;
 
 ---
 
+## 6.7. Frontend Architecture (Modular Data-Centric Design)
+
+### What Was Refactored
+
+The frontend evolved from a single-file prototype into a **modular, data-centric architecture** following ES6 module patterns:
+
+✅ **File Structure** (`internal/server/static/`)
+```
+├── index.html        # HTML structure only (8.7KB)
+├── style.css         # All styles (16.3KB)
+├── app.js            # Main application logic (26.9KB)
+├── config.js         # Configuration constants (717 bytes)
+├── state.js          # State management (962 bytes)
+├── ws.js             # WebSocket connection management (1.9KB)
+└── dropdown.js       # Reusable dropdown component (4.9KB)
+```
+
+### Module Responsibilities
+
+**config.js** - Central configuration
+- Resource types list (`RESOURCE_TYPES`)
+- API endpoint paths (`API_PATHS`)
+- Relationship type definitions (`RELATIONSHIP_TYPES`)
+- localStorage keys (`LOCAL_STORAGE_KEYS`)
+- Constants (events limit, etc.)
+
+**state.js** - State management
+- `createInitialState()` - Initialize application state
+- `resetForNewConnection()` - Clear state for reconnections
+- State structure: resources, filters, UI state, WebSocket state, log state
+
+**ws.js** - WebSocket lifecycle
+- `createResourceSocket()` - Factory for WebSocket manager
+- Connection management with auto-reconnect
+- Connection ID tracking to prevent race conditions
+- Snapshot completion detection
+- Configurable handlers (onOpen, onMessage, onClose, onError)
+
+**dropdown.js** - Reusable component
+- Custom web component (`<k8v-dropdown>`)
+- Searchable dropdown with keyboard navigation
+- Used for namespace and container selection
+- Emits standard change events
+
+**app.js** - Application orchestration
+- Main `App` class coordinating all functionality
+- UI event handling and rendering
+- Resource list management with incremental updates
+- Detail panel and logs viewer
+- Search and filtering logic
+- Namespace and resource type switching
+
+**index.html** - Markup only
+- Semantic HTML structure
+- No inline JavaScript (all in modules)
+- Minimal inline styles (button styling only)
+
+**style.css** - Complete styling
+- Glassmorphic dark theme
+- Responsive grid layouts
+- Component styles (cards, dropdowns, panels)
+- Animation and transition definitions
+
+### Architecture Benefits
+
+1. **Separation of Concerns**: Each file has a single, clear responsibility
+2. **Testability**: Modules can be tested independently
+3. **Maintainability**: Easy to locate and modify specific functionality
+4. **Reusability**: Components like dropdown can be reused
+5. **Code Organization**: Logical grouping by function, not file size
+6. **Performance**: Browser can cache individual modules
+7. **Developer Experience**: Easier to navigate and understand codebase
+
+### Data Flow
+
+```
+User Action
+    ↓
+app.js (Event Handler)
+    ↓
+state.js (Update State)
+    ↓
+ws.js (Send to Server) OR app.js (Update UI)
+    ↓
+app.js (Render Changes)
+    ↓
+DOM Update
+```
+
+### Key Design Patterns
+
+- **Module Pattern**: ES6 imports/exports for clean dependencies
+- **Factory Pattern**: `createResourceSocket()`, `createInitialState()`
+- **Observer Pattern**: WebSocket handlers, event listeners
+- **Component Pattern**: Custom web component (dropdown)
+- **Singleton Pattern**: Single App instance manages global state
+
+---
+
 ## 7. Phase 1 Complete (Production Backend + Minimal Frontend)
 
 ### What Was Built
@@ -821,16 +924,17 @@ const wsUrl = `/ws${params.length > 0 ? '?' + params.join('&') : ''}`;
 
 | Aspect | Details |
 |--------|---------|
-| **Current Stage** | ✅ Phase 2 Complete - Production-ready application |
-| **Tech Stack** | Go backend + HTML/CSS/JS frontend (no frameworks) |
+| **Current Stage** | ✅ Phase 3 Complete - Advanced filtering, performance optimization, modular frontend |
+| **Tech Stack** | Go backend + Modular ES6 frontend (no frameworks) |
+| **Frontend Architecture** | 7 ES6 modules: app.js, config.js, state.js, ws.js, dropdown.js, style.css, index.html |
 | **Backend Language** | Go 1.23+ with client-go v0.31.0 |
 | **Communication** | WebSocket (real-time bidirectional updates) |
 | **Target User** | Developers with kubectl/kubeconfig access |
 | **Deployment Model** | Single 62MB binary (`./k8v` command) |
 | **Similar Tools** | k9s (TUI), Lens (Electron), kubectl proxy (proxy-only) |
 | **Core Resources** | Pods, Deployments, Services, Ingress, ReplicaSets, ConfigMaps, Secrets |
-| **MVP Status** | ✅ Resource visualization, ✅ Relationships, ✅ Live streaming, ❌ Pod logs |
-| **UI** | ✅ Complete - Optimized with incremental updates |
+| **MVP Status** | ✅ Resource visualization, ✅ Relationships, ✅ Live streaming, ✅ Pod logs |
+| **UI** | ✅ Complete - Modular architecture with incremental updates |
 | **POC** | ✅ Complete (k8v-poc validates streaming architecture) |
 | **Data Model** | ✅ Complete - Generic relationship system implemented |
 | **Production Backend** | ✅ Complete - Informers, WebSocket hub, transformers |
@@ -885,6 +989,8 @@ const wsUrl = `/ws${params.length > 0 ? '?' + params.join('&') : ''}`;
 14. **Simplicity Wins:** Removing the "ALL" filter simplified the UX and code. Users naturally want to focus on specific resource types, not see everything mixed together.
 
 15. **Alphabetical > Grouped Sorting:** Within a filtered view (e.g., Pods only), alphabetical sorting by name is more useful than grouping by namespace then name. Users know what they're looking for.
+
+16. **Modular Frontend Architecture:** Splitting the frontend into ES6 modules (config, state, ws, app) dramatically improves maintainability and developer experience. Each module has a single responsibility, making it easy to locate and modify specific functionality. The data-centric approach (separating state and configuration from logic) makes the codebase more testable and extensible.
 
 ---
 
@@ -941,4 +1047,4 @@ When making changes, update the relevant sections:
 
 ---
 
-**Last Updated:** 2025-11-28 - Phase 3 Continued: Added lazy loading by resource type (40-100x network reduction), instant stats loading via REST API, fixed stats overwriting bug, and removed automatic namespace switching
+**Last Updated:** 2025-11-29 - Frontend Refactored: Split into modular ES6 architecture (config.js, state.js, ws.js, app.js, dropdown.js). Added fullscreen mode for detail panel. Improved UI consistency with Feather icons for all buttons.

@@ -181,6 +181,12 @@ class App {
 
       const detailPanel = document.getElementById('detail-panel');
       if (detailPanel && detailPanel.classList.contains('visible')) {
+        // If in fullscreen mode, exit fullscreen first
+        if (this.state.ui.detailFullscreen) {
+          this.toggleFullscreen();
+          return;
+        }
+        // Otherwise close the panel
         this.closeDetail();
         return;
       }
@@ -618,7 +624,25 @@ class App {
     }
     this.state.log.currentKey = null;
     this.state.ui.detailResourceId = null;
+    this.state.ui.detailFullscreen = false;
     document.getElementById('detail-panel').classList.remove('visible');
+    document.getElementById('detail-panel').classList.remove('fullscreen');
+  }
+
+  toggleFullscreen() {
+    this.state.ui.detailFullscreen = !this.state.ui.detailFullscreen;
+    const panel = document.getElementById('detail-panel');
+    const icon = document.getElementById('fullscreen-icon');
+
+    if (this.state.ui.detailFullscreen) {
+      panel.classList.add('fullscreen');
+      icon.setAttribute('data-feather', 'minimize');
+    } else {
+      panel.classList.remove('fullscreen');
+      icon.setAttribute('data-feather', 'maximize');
+    }
+
+    feather.replace();
   }
 
   switchTab(tabName, target) {
@@ -685,6 +709,7 @@ class App {
     document.getElementById('events-toggle').addEventListener('click', () => this.toggleEventsDrawer());
     document.getElementById('events-close').addEventListener('click', () => this.toggleEventsDrawer());
     document.getElementById('detail-close').addEventListener('click', () => this.closeDetail());
+    document.getElementById('detail-fullscreen').addEventListener('click', () => this.toggleFullscreen());
 
     document.querySelectorAll('.tab[data-tab]').forEach(tab => {
       tab.addEventListener('click', () => this.switchTab(tab.dataset.tab, tab));

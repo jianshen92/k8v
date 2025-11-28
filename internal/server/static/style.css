@@ -132,8 +132,9 @@ k8v-dropdown { position: relative; margin-top: 8px; display: block; }
 .event-message { font-size: 13px; color: #ccc; line-height: 1.4; }
 
 /* Detail panel (reuse logic) */
-#detail-panel { position: fixed; right: 0; top: 0; bottom: 0; width: 560px; background: rgba(15,15,18,0.98); border-left: 1px solid rgba(255,255,255,0.08); transform: translateX(100%); transition: transform 0.3s ease; z-index: 1000; display: flex; flex-direction: column; }
+#detail-panel { position: fixed; right: 0; top: 0; bottom: 0; width: 560px; background: rgba(15,15,18,0.98); backdrop-filter: blur(20px); border-left: 1px solid rgba(255,255,255,0.08); transform: translateX(100%); transition: transform 0.3s ease; z-index: 1000; display: flex; flex-direction: column; }
 #detail-panel.visible { transform: translateX(0); }
+#detail-panel.fullscreen { left: 0; width: 100%; z-index: 1001; border-left: none; }
 .detail-header { background: rgba(32,32,40,0.9); padding: 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); flex-shrink: 0; }
 .panel-tabs { display: flex; background: rgba(24,24,30,0.9); border-bottom: 1px solid rgba(255,255,255,0.08); flex-shrink: 0; }
 .tab { padding: 12px 24px; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
