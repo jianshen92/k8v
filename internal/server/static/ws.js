@@ -29,6 +29,8 @@ export function createResourceSocket(state, handlers) {
           if (!state.snapshotComplete) {
             state.snapshotComplete = true;
             console.log(`[WS] Snapshot complete: ${state.snapshotCount} resources loaded`);
+            // Trigger render now that all resources are buffered
+            handlers.onSnapshotComplete?.();
           }
         }, 900);
       }

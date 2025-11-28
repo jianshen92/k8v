@@ -16,6 +16,7 @@ class App {
       onMessage: this.handleResourceEvent.bind(this),
       onClose: this.onSocketClose.bind(this),
       onError: this.onSocketError.bind(this),
+      onSnapshotComplete: this.onSnapshotComplete.bind(this),
     });
   }
 
@@ -55,6 +56,12 @@ class App {
 
   onSocketClose() {
     document.getElementById('connection-status').textContent = 'Disconnected';
+  }
+
+  onSnapshotComplete() {
+    console.log(`[App] Snapshot complete, rendering ${this.state.resources.size} resources`);
+    this.renderResourceList();
+    this.renderEvents();
   }
 
   // ---------- Namespace Filters ----------
@@ -435,13 +442,13 @@ class App {
       this.updateEventsBadge();
     }
 
+    // Only render if snapshot is complete (incremental updates)
+    // During snapshot, we buffer resources without rendering for speed
     if (this.state.snapshotComplete) {
       this.updateResourceInList(resourceId, event.type);
-    } else {
-      this.renderResourceList();
+      this.renderEvents();
     }
-
-    this.renderEvents();
+    // During snapshot: do nothing, just buffer in state.resources
   }
 
   // ---------- Detail & Logs ----------
