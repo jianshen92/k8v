@@ -18,10 +18,11 @@ var upgrader = websocket.Upgrader{
 
 // Client represents a WebSocket client connection
 type Client struct {
-	conn      *websocket.Conn
-	send      chan k8s.ResourceEvent
-	hub       *Hub
-	namespace string // namespace filter ("" = all namespaces)
+	conn         *websocket.Conn
+	send         chan k8s.ResourceEvent
+	hub          *Hub
+	namespace    string // namespace filter ("" = all namespaces)
+	resourceType string // resource type filter ("" = all types)
 }
 
 // Hub manages all active WebSocket connections
@@ -70,6 +71,11 @@ func (h *Hub) Run() {
 					continue
 				}
 
+				// Skip if client has resource type filter and resource doesn't match
+				if client.resourceType != "" && event.Resource.Type != client.resourceType {
+					continue
+				}
+
 				select {
 				case client.send <- event:
 				default:
@@ -101,20 +107,28 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	if namespace == "" || namespace == "all" {
 		namespace = "" // Empty string = all namespaces
 	}
-	log.Printf("New WebSocket connection with namespace filter: '%s'", namespace)
+
+	// Parse resource type filter from query params
+	resourceType := r.URL.Query().Get("type")
+	if resourceType == "" || resourceType == "all" {
+		resourceType = "" // Empty string = all types
+	}
+
+	log.Printf("New WebSocket connection with filters - namespace: '%s', type: '%s'", namespace, resourceType)
 
 	client := &Client{
-		conn:      conn,
-		send:      make(chan k8s.ResourceEvent, 10000), // Large buffer for initial snapshot
-		hub:       s.hub,
-		namespace: namespace,
+		conn:         conn,
+		send:         make(chan k8s.ResourceEvent, 10000), // Large buffer for initial snapshot
+		hub:          s.hub,
+		namespace:    namespace,
+		resourceType: resourceType,
 	}
 
 	s.hub.register <- client
 
-	// Send initial snapshot of resources (filtered by namespace) synchronously before starting pumps
-	snapshot := s.watcher.GetSnapshotFiltered(namespace)
-	log.Printf("Sending filtered snapshot of %d resources (namespace=%s) to new client", len(snapshot), namespace)
+	// Send initial snapshot of resources (filtered by namespace and type) synchronously before starting pumps
+	snapshot := s.watcher.GetSnapshotFilteredByType(namespace, resourceType)
+	log.Printf("Sending filtered snapshot of %d resources (namespace=%s, type=%s) to new client", len(snapshot), namespace, resourceType)
 
 	// Log first few resources in snapshot for debugging
 	if len(snapshot) > 0 && len(snapshot) <= 10 {

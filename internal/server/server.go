@@ -34,6 +34,7 @@ func (s *Server) Start() error {
 	http.HandleFunc("/", s.handleIndex)
 	http.HandleFunc("/health", s.handleHealth)
 	http.HandleFunc("/api/namespaces", s.handleNamespaces)
+	http.HandleFunc("/api/stats", s.handleStats)
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		s.handleWebSocket(w, r)
 	})

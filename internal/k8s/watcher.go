@@ -498,3 +498,51 @@ func (w *Watcher) GetSnapshotFiltered(namespace string) []ResourceEvent {
 func (w *Watcher) GetResourceCount() int {
 	return w.cache.Count()
 }
+
+// GetResourceCounts returns counts by resource type
+func (w *Watcher) GetResourceCounts(namespace string) map[string]int {
+	var resources []*types.Resource
+	if namespace == "" || namespace == "all" {
+		resources = w.cache.List()
+	} else {
+		resources = w.cache.ListByNamespace(namespace)
+	}
+
+	counts := make(map[string]int)
+	for _, r := range resources {
+		counts[r.Type]++
+	}
+	counts["total"] = len(resources)
+
+	return counts
+}
+
+// GetSnapshotFilteredByType returns resources filtered by namespace and type
+func (w *Watcher) GetSnapshotFilteredByType(namespace string, resourceType string) []ResourceEvent {
+	var resources []*types.Resource
+	if namespace == "" || namespace == "all" {
+		resources = w.cache.List()
+	} else {
+		resources = w.cache.ListByNamespace(namespace)
+	}
+
+	// Filter by resource type
+	filtered := []*types.Resource{}
+	for _, r := range resources {
+		if resourceType == "" || resourceType == "all" || r.Type == resourceType {
+			filtered = append(filtered, r)
+		}
+	}
+
+	events := make([]ResourceEvent, len(filtered))
+	for i, resource := range filtered {
+		events[i] = ResourceEvent{
+			Type:     EventAdded,
+			Resource: resource,
+		}
+	}
+
+	fmt.Printf("Filtered snapshot by type contains %d resources (namespace=%s, type=%s)\n",
+		len(events), namespace, resourceType)
+	return events
+}

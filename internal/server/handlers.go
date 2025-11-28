@@ -43,3 +43,13 @@ func (s *Server) handleNamespaces(w http.ResponseWriter, r *http.Request) {
 		"namespaces": namespaces,
 	})
 }
+
+// handleStats returns resource counts by type
+func (s *Server) handleStats(w http.ResponseWriter, r *http.Request) {
+	namespace := r.URL.Query().Get("namespace")
+
+	counts := s.watcher.GetResourceCounts(namespace)
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(counts)
+}
