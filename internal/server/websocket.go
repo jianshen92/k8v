@@ -96,6 +96,19 @@ func (h *Hub) Broadcast(event k8s.ResourceEvent) {
 	h.broadcast <- event
 }
 
+// DisconnectAll forcefully disconnects all clients
+func (h *Hub) DisconnectAll() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	for client := range h.clients {
+		close(client.send)
+		client.conn.Close()
+		delete(h.clients, client)
+	}
+	h.logger.Printf("[WebSocket] All clients disconnected")
+}
+
 // handleWebSocket handles WebSocket upgrade and connection
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
@@ -130,7 +143,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	s.hub.register <- client
 
 	// Send initial snapshot of resources (filtered by namespace and type) synchronously before starting pumps
-	snapshot := s.watcher.GetSnapshotFilteredByType(namespace, resourceType)
+	snapshot := s.watcherProvider.GetWatcher().GetSnapshotFilteredByType(namespace, resourceType)
 	s.logger.Printf("[WebSocket] Sending filtered snapshot of %d resources (namespace=%s, type=%s) to new client", len(snapshot), namespace, resourceType)
 
 	// Log first few resources in snapshot for debugging

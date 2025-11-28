@@ -77,6 +77,19 @@ func (h *LogHub) Run() {
 	}
 }
 
+// DisconnectAll forcefully disconnects all log streaming clients
+func (h *LogHub) DisconnectAll() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	for client := range h.clients {
+		close(client.send)
+		client.conn.Close()
+		delete(h.clients, client)
+	}
+	h.logger.Printf("[LogHub] All clients disconnected")
+}
+
 // handleLogsWebSocket handles WebSocket upgrade and log streaming
 func (s *Server) handleLogsWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Parse required query parameters
@@ -115,7 +128,7 @@ func (s *Server) handleLogsWebSocket(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	go func() {
-		err := s.watcher.StreamPodLogs(ctx, namespace, pod, container, s.logHub.broadcast)
+		err := s.watcherProvider.GetWatcher().StreamPodLogs(ctx, namespace, pod, container, s.logHub.broadcast)
 		if err != nil {
 			s.logger.Printf("[LogStream] Streaming error for %s: %v", podKey, err)
 			// Send error message to client

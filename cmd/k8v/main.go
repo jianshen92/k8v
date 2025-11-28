@@ -8,6 +8,7 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/user/k8v/internal/app"
 	"github.com/user/k8v/internal/k8s"
 	"github.com/user/k8v/internal/server"
 )
@@ -26,47 +27,26 @@ func main() {
 	}
 	defer logger.Close()
 
-	// Create Kubernetes client
-	logger.Printf("Connecting to Kubernetes cluster...")
-	client, err := k8s.NewClient()
-	if err != nil {
-		log.Fatalf("Failed to create Kubernetes client: %v", err)
-	}
-	client.SetLogger(logger)
-	logger.Printf("✓ Connected to Kubernetes cluster")
-
-	// Create resource cache
-	cache := k8s.NewResourceCache()
-	logger.Printf("✓ Resource cache initialized")
-
-	// Create hub for WebSocket broadcasting
+	// Create hubs for WebSocket broadcasting
 	hub := server.NewHub(logger)
 	go hub.Run()
 
-	// Create log hub for log streaming
 	logHub := server.NewLogHub(logger)
 	go logHub.Run()
 
-	// Create watcher with event handler that broadcasts to hub
-	watcher := k8s.NewWatcher(client, cache, hub.Broadcast)
-	err = watcher.Start()
+	// Create and start app with current context
+	currentContext, err := k8s.GetCurrentContext()
 	if err != nil {
-		log.Fatalf("Failed to start watcher: %v", err)
+		log.Fatalf("Failed to get current context: %v", err)
 	}
-	logger.Printf("✓ Watcher initialized")
 
-	// Start informers
-	stopCh := make(chan struct{})
-	client.Start(stopCh)
-	logger.Printf("✓ Informers started")
-
-	// Wait for informer caches to sync (logging is done inside WaitForCacheSync)
-	if !client.WaitForCacheSync(stopCh) {
-		log.Fatal("Failed to sync informer caches")
+	k8vApp := app.NewApp(logger, hub, logHub)
+	if err := k8vApp.Start(currentContext); err != nil {
+		log.Fatalf("Failed to start app: %v", err)
 	}
 
 	// Create and start HTTP server
-	srv, err := server.NewServerWithHub(*port, watcher, hub, logHub)
+	srv, err := server.NewServerWithProvider(*port, k8vApp, hub, logHub)
 	if err != nil {
 		log.Fatalf("Failed to create server: %v", err)
 	}
@@ -79,7 +59,7 @@ func main() {
 		<-sigCh
 
 		logger.Printf("\nShutting down...")
-		close(stopCh)
+		k8vApp.Stop()
 		srv.Close()
 		os.Exit(0)
 	}()

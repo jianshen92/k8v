@@ -25,8 +25,10 @@ class App {
     this.attachUIListeners();
     this.renderFilters();
     this.renderResourceList();
+    this.setupContextDropdown();
     this.setupNamespaceDropdown();
     this.setupSearchFilter();
+    this.fetchAndDisplayContexts();
     this.fetchNamespaces();
 
     await this.fetchAndDisplayStats();
@@ -706,6 +708,86 @@ class App {
         this.setNamespace(e.detail.value);
       }
     });
+  }
+
+  setupContextDropdown() {
+    this.contextDropdown = document.getElementById('context-dropdown');
+    if (!this.contextDropdown) return;
+    this.contextDropdown.setAttribute('searchable', 'true');
+    this.contextDropdown.addEventListener('change', (e) => {
+      if (e.detail && e.detail.value !== undefined) {
+        this.switchContext(e.detail.value);
+      }
+    });
+  }
+
+  async fetchAndDisplayContexts() {
+    try {
+      const response = await fetch('/api/contexts');
+      const data = await response.json();
+      const contexts = data.contexts || [];
+
+      // Find current context
+      const currentCtx = contexts.find(c => c.current);
+      const currentContext = currentCtx ? currentCtx.name : '';
+
+      console.log('[App] Available contexts:', contexts, 'Current:', currentContext);
+
+      // Update dropdown
+      if (this.contextDropdown) {
+        const options = contexts.map(ctx => ({
+          value: ctx.name,
+          label: ctx.name + (ctx.current ? ' (current)' : '')
+        }));
+
+        this.contextDropdown.setOptions(options);
+        this.contextDropdown.setValue(currentContext);
+      }
+    } catch (err) {
+      console.error('[App] Failed to fetch contexts:', err);
+    }
+  }
+
+  async switchContext(newContext) {
+    if (!newContext) return;
+
+    console.log(`[App] Switching to context: ${newContext}`);
+
+    try {
+      const response = await fetch(`/api/context/switch?context=${encodeURIComponent(newContext)}`, {
+        method: 'POST'
+      });
+
+      if (!response.ok) {
+        throw new Error(`Failed to switch context: ${response.statusText}`);
+      }
+
+      const data = await response.json();
+      console.log('[App] Context switched successfully:', data);
+
+      // Clear all state and reconnect
+      resetForNewConnection(this.state);
+      this.renderResourceList();
+
+      // Update context dropdown to show the new context
+      if (this.contextDropdown) {
+        this.contextDropdown.setValue(newContext);
+      }
+
+      // Wait a bit for server to complete the switch
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Refresh namespaces and stats for new context
+      this.fetchNamespaces();
+      await this.fetchAndDisplayStats();
+
+      // Reconnect WebSocket
+      this.wsManager.connect();
+
+    } catch (err) {
+      console.error('[App] Failed to switch context:', err);
+      alert(`Failed to switch context: ${err.message}`);
+    }
   }
 
   attachUIListeners() {

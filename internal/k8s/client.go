@@ -25,9 +25,15 @@ type Client struct {
 	logger          Logger
 }
 
-// NewClient creates a new Kubernetes client with informers
+// NewClient creates a new Kubernetes client with informers using the current context
 func NewClient() (*Client, error) {
-	config, err := getKubeConfig()
+	return NewClientWithContext("")
+}
+
+// NewClientWithContext creates a new Kubernetes client with informers using a specific context
+// If context is empty, uses the current context from kubeconfig
+func NewClientWithContext(context string) (*Client, error) {
+	config, err := getKubeConfigWithContext(context)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get kubeconfig: %w", err)
 	}
@@ -46,31 +52,94 @@ func NewClient() (*Client, error) {
 	}, nil
 }
 
-// getKubeConfig returns a Kubernetes client config
+// getKubeConfig returns a Kubernetes client config using the current context
 // It tries in-cluster config first, then falls back to kubeconfig file
 func getKubeConfig() (*rest.Config, error) {
-	// Try in-cluster config first
+	return getKubeConfigWithContext("")
+}
+
+// getKubeConfigWithContext returns a Kubernetes client config using a specific context
+// If context is empty, uses the current context from kubeconfig
+func getKubeConfigWithContext(context string) (*rest.Config, error) {
+	// Try in-cluster config first (ignore context in this case)
 	config, err := rest.InClusterConfig()
 	if err == nil {
 		return config, nil
 	}
 
 	// Fall back to kubeconfig file
-	kubeconfig := os.Getenv("KUBECONFIG")
-	if kubeconfig == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil, fmt.Errorf("failed to get home directory: %w", err)
-		}
-		kubeconfig = filepath.Join(home, ".kube", "config")
+	kubeconfigPath := getKubeconfigPath()
+
+	// Load the kubeconfig file
+	loadingRules := clientcmd.NewDefaultClientConfigLoadingRules()
+	loadingRules.ExplicitPath = kubeconfigPath
+
+	configOverrides := &clientcmd.ConfigOverrides{}
+	if context != "" {
+		configOverrides.CurrentContext = context
 	}
 
-	config, err = clientcmd.BuildConfigFromFlags("", kubeconfig)
+	kubeConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(loadingRules, configOverrides)
+	config, err = kubeConfig.ClientConfig()
 	if err != nil {
 		return nil, fmt.Errorf("failed to build config from kubeconfig: %w", err)
 	}
 
 	return config, nil
+}
+
+// getKubeconfigPath returns the path to the kubeconfig file
+func getKubeconfigPath() string {
+	kubeconfig := os.Getenv("KUBECONFIG")
+	if kubeconfig == "" {
+		home, _ := os.UserHomeDir()
+		kubeconfig = filepath.Join(home, ".kube", "config")
+	}
+	return kubeconfig
+}
+
+// Context represents a Kubernetes context
+type Context struct {
+	Name      string `json:"name"`
+	Cluster   string `json:"cluster"`
+	Namespace string `json:"namespace"`
+	Current   bool   `json:"current"`
+}
+
+// ListContexts returns all available contexts from kubeconfig
+func ListContexts() ([]Context, error) {
+	kubeconfigPath := getKubeconfigPath()
+
+	// Load the kubeconfig file
+	config, err := clientcmd.LoadFromFile(kubeconfigPath)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load kubeconfig: %w", err)
+	}
+
+	contexts := make([]Context, 0, len(config.Contexts))
+	for name, ctxInfo := range config.Contexts {
+		contexts = append(contexts, Context{
+			Name:      name,
+			Cluster:   ctxInfo.Cluster,
+			Namespace: ctxInfo.Namespace,
+			Current:   name == config.CurrentContext,
+		})
+	}
+
+	return contexts, nil
+}
+
+// GetCurrentContext returns the current context name
+func GetCurrentContext() (string, error) {
+	kubeconfigPath := getKubeconfigPath()
+
+	// Load the kubeconfig file
+	config, err := clientcmd.LoadFromFile(kubeconfigPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to load kubeconfig: %w", err)
+	}
+
+	return config.CurrentContext, nil
 }
 
 // SetLogger sets the logger for the client
