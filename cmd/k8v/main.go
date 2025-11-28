@@ -35,6 +35,10 @@ func main() {
 	hub := server.NewHub()
 	go hub.Run()
 
+	// Create log hub for log streaming
+	logHub := server.NewLogHub()
+	go logHub.Run()
+
 	// Create watcher with event handler that broadcasts to hub
 	watcher := k8s.NewWatcher(client, cache, hub.Broadcast)
 	err = watcher.Start()
@@ -56,7 +60,7 @@ func main() {
 	log.Println("✓ Informer caches synced")
 
 	// Create and start HTTP server
-	srv := server.NewServerWithHub(*port, watcher, hub)
+	srv := server.NewServerWithHub(*port, watcher, hub, logHub)
 
 	// Handle shutdown gracefully
 	go func() {

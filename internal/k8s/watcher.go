@@ -1,6 +1,7 @@
 package k8s
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"sort"
@@ -545,4 +546,9 @@ func (w *Watcher) GetSnapshotFilteredByType(namespace string, resourceType strin
 	fmt.Printf("Filtered snapshot by type contains %d resources (namespace=%s, type=%s)\n",
 		len(events), namespace, resourceType)
 	return events
+}
+
+// StreamPodLogs delegates to the client's StreamPodLogs method
+func (w *Watcher) StreamPodLogs(ctx context.Context, namespace, podName, containerName string, broadcast chan<- LogMessage) error {
+	return w.client.StreamPodLogs(ctx, namespace, podName, containerName, broadcast)
 }

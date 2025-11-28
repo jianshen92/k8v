@@ -17,14 +17,16 @@ type Server struct {
 	port    int
 	watcher *k8s.Watcher
 	hub     *Hub
+	logHub  *LogHub
 }
 
 // NewServerWithHub creates a new HTTP server with an existing hub
-func NewServerWithHub(port int, watcher *k8s.Watcher, hub *Hub) *Server {
+func NewServerWithHub(port int, watcher *k8s.Watcher, hub *Hub, logHub *LogHub) *Server {
 	return &Server{
 		port:    port,
 		watcher: watcher,
 		hub:     hub,
+		logHub:  logHub,
 	}
 }
 
@@ -37,6 +39,9 @@ func (s *Server) Start() error {
 	http.HandleFunc("/api/stats", s.handleStats)
 	http.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
 		s.handleWebSocket(w, r)
+	})
+	http.HandleFunc("/ws/logs", func(w http.ResponseWriter, r *http.Request) {
+		s.handleLogsWebSocket(w, r)
 	})
 
 	addr := fmt.Sprintf(":%d", s.port)

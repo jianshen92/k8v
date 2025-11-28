@@ -144,15 +144,15 @@
     .event-message { font-size: 13px; color: #ccc; line-height: 1.4; }
 
     /* Detail panel (reuse logic) */
-    #detail-panel { position: fixed; right: 0; top: 0; bottom: 0; width: 560px; background: rgba(15,15,18,0.98); border-left: 1px solid rgba(255,255,255,0.08); transform: translateX(100%); transition: transform 0.3s ease; overflow-y: auto; z-index: 1000; }
+    #detail-panel { position: fixed; right: 0; top: 0; bottom: 0; width: 560px; background: rgba(15,15,18,0.98); border-left: 1px solid rgba(255,255,255,0.08); transform: translateX(100%); transition: transform 0.3s ease; z-index: 1000; display: flex; flex-direction: column; }
     #detail-panel.visible { transform: translateX(0); }
-    .detail-header { background: rgba(32,32,40,0.9); padding: 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); }
-    .panel-tabs { display: flex; background: rgba(24,24,30,0.9); border-bottom: 1px solid rgba(255,255,255,0.08); }
+    .detail-header { background: rgba(32,32,40,0.9); padding: 16px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255,255,255,0.08); flex-shrink: 0; }
+    .panel-tabs { display: flex; background: rgba(24,24,30,0.9); border-bottom: 1px solid rgba(255,255,255,0.08); flex-shrink: 0; }
     .tab { padding: 12px 24px; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; }
     .tab.active { border-bottom-color: #C4F561; color: #C4F561; }
-    .panel-content { padding: 20px; }
+    .panel-content { padding: 20px; flex: 1; overflow: hidden; display: flex; flex-direction: column; }
     .tab-content { display: none; }
-    .tab-content.active { display: block; }
+    .tab-content.active { display: flex; flex-direction: column; flex: 1; }
     .section { margin-bottom: 24px; }
     .section h3 { font-size: 16px; margin-bottom: 12px; color: #C4F561; font-family: 'Space Grotesk', sans-serif; text-transform: uppercase; letter-spacing: 1px; }
     .section h4 { font-size: 13px; margin-top: 16px; margin-bottom: 8px; color: #999; }
@@ -293,6 +293,10 @@
         <i data-feather="code" style="width: 16px; height: 16px; margin-right: 6px; vertical-align: middle;"></i>
         YAML
       </div>
+      <div class="tab" id="logs-tab-button" onclick="switchTab('logs')" style="display: none;">
+        <i data-feather="terminal" style="width: 16px; height: 16px; margin-right: 6px; vertical-align: middle;"></i>
+        Logs
+      </div>
     </div>
     <div class="panel-content">
       <div id="overview-tab" class="tab-content active">
@@ -303,6 +307,54 @@
         <div class="section" id="relationships-section"><h3>Relationships</h3></div>
       </div>
       <div id="yaml-tab" class="tab-content"><pre><code id="yaml-content"></code></pre></div>
+      <div id="logs-tab" class="tab-content" style="display: flex; flex-direction: column; flex: 1; overflow: hidden;">
+        <!-- Container selection (for multi-container pods) -->
+        <div id="container-selector" style="display: none; margin-bottom: 16px;">
+          <label for="container-select" style="display: block; margin-bottom: 8px; color: rgba(255,255,255,0.7); font-size: 14px;">
+            Select Container:
+          </label>
+          <select id="container-select" onchange="loadLogs()" style="
+            width: 100%;
+            padding: 8px;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 6px;
+            color: white;
+            font-family: 'Inter', sans-serif;
+            cursor: pointer;
+          ">
+            <option value="">-- Choose Container --</option>
+          </select>
+        </div>
+
+        <!-- Log display area -->
+        <div id="logs-content" style="
+          background: rgba(0,0,0,0.3);
+          border: 1px solid rgba(255,255,255,0.1);
+          border-radius: 6px;
+          padding: 12px;
+          flex: 1;
+          min-height: 0;
+          overflow-y: auto;
+          overflow-x: hidden;
+          font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace;
+          font-size: 13px;
+          line-height: 1.5;
+          color: rgba(255,255,255,0.9);
+          white-space: pre-wrap;
+          word-wrap: break-word;
+        "></div>
+
+        <!-- Loading state -->
+        <div id="logs-loading" style="display: none; text-align: center; padding: 40px; color: rgba(255,255,255,0.5);">
+          Loading logs...
+        </div>
+
+        <!-- Error state -->
+        <div id="logs-error" style="display: none; padding: 20px; color: #ff6b6b; background: rgba(255,107,107,0.1); border-radius: 6px; margin-top: 16px;">
+          <strong>Error:</strong> <span id="logs-error-message"></span>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -327,6 +379,10 @@
     let reconnectTimeout = null;  // Track reconnect timeout
     let isManualReconnect = false;  // Flag for manual reconnections
     let wsConnectionId = 0;  // Track active connection ID
+
+    // ---------- Log Streaming ----------
+    let logSocket = null;  // WebSocket for log streaming
+    let currentLogPod = null;  // Currently streaming pod (namespace/pod/container)
 
     function connect() {
       // Increment connection ID to invalidate old handlers
@@ -377,10 +433,9 @@
           window.snapshotTimer = setTimeout(() => {
             if (!snapshotComplete) {
               snapshotComplete = true;
-              if (snapshotCount === 0 && currentNamespace !== 'all') {
-                console.warn(`No resources found in namespace "${currentNamespace}", switching to "all"`);
-                setNamespace('all');
-              }
+              // Note: We used to auto-switch to "all" if snapshot was empty,
+              // but that violates user expectations. Now we just show empty state.
+              console.log(`[WS] Snapshot complete: ${snapshotCount} resources loaded`);
             }
           }, 900);
         }
@@ -1063,9 +1118,102 @@
       renderEvents(); // Will only render if drawer is open
     }
 
+    // ---------- Log Streaming Functions ----------
+    function loadLogs() {
+      // Find the currently displayed resource
+      const detailTitle = document.getElementById('detail-title').textContent;
+      const resource = Object.values(resources).find(r =>
+        r.type === 'Pod' && detailTitle.includes(r.name)
+      );
+
+      if (!resource || resource.type !== 'Pod') return;
+
+      const container = document.getElementById('container-select').value;
+      if (!container) {
+        document.getElementById('logs-content').textContent = 'Please select a container.';
+        return;
+      }
+
+      // Close existing log connection
+      if (logSocket) {
+        logSocket.close();
+        logSocket = null;
+      }
+
+      // Clear previous logs and show loading
+      document.getElementById('logs-content').textContent = '';
+      document.getElementById('logs-loading').style.display = 'block';
+      document.getElementById('logs-error').style.display = 'none';
+
+      // Connect to log stream
+      const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${wsProtocol}//${window.location.host}/ws/logs?namespace=${resource.namespace}&pod=${resource.name}&container=${container}`;
+
+      logSocket = new WebSocket(wsUrl);
+      currentLogPod = `${resource.namespace}/${resource.name}/${container}`;
+
+      logSocket.onopen = () => {
+        console.log('[LogStream] Connected:', currentLogPod);
+        document.getElementById('logs-loading').style.display = 'none';
+      };
+
+      logSocket.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+
+        if (message.type === 'LOG_LINE') {
+          appendLogLine(message.line);
+        } else if (message.type === 'LOG_END') {
+          appendLogLine('\n[End of logs]');
+          console.log('[LogStream] Ended:', message.reason);
+        } else if (message.type === 'LOG_ERROR') {
+          showLogError(message.error);
+          console.error('[LogStream] Error:', message.error);
+        }
+      };
+
+      logSocket.onerror = (error) => {
+        console.error('[LogStream] WebSocket error:', error);
+        showLogError('WebSocket connection error');
+      };
+
+      logSocket.onclose = () => {
+        console.log('[LogStream] Disconnected');
+        if (currentLogPod) {
+          appendLogLine('\n[Connection closed]');
+        }
+      };
+    }
+
+    function appendLogLine(line) {
+      const logsContent = document.getElementById('logs-content');
+      logsContent.textContent += line;
+
+      // Auto-scroll to bottom
+      logsContent.scrollTop = logsContent.scrollHeight;
+    }
+
+    function showLogError(errorMessage) {
+      document.getElementById('logs-loading').style.display = 'none';
+      document.getElementById('logs-error').style.display = 'block';
+      document.getElementById('logs-error-message').textContent = errorMessage;
+    }
+
     // ---------- Detail panel ----------
     function showResource(resourceId) {
       const resource = resources[resourceId]; if (!resource) return;
+
+      // Close existing log stream when switching resources
+      if (logSocket) {
+        logSocket.close();
+        logSocket = null;
+      }
+      currentLogPod = null;
+
+      // Clear log content
+      document.getElementById('logs-content').textContent = '';
+      document.getElementById('logs-loading').style.display = 'none';
+      document.getElementById('logs-error').style.display = 'none';
+
       document.getElementById('detail-title').textContent = `${resource.type}: ${resource.name}`;
       const statusInfo = document.getElementById('status-info');
       statusInfo.innerHTML = `
@@ -1090,14 +1238,78 @@
       });
       relationshipsSection.innerHTML = relationshipsHTML;
       document.getElementById('yaml-content').textContent = resource.yaml || 'No YAML available';
+
+      // Handle Logs tab visibility and container selection
+      const logsTabButton = document.getElementById('logs-tab-button');
+      if (resource.type === 'Pod') {
+        logsTabButton.style.display = 'flex';
+
+        // Populate container selector
+        const containers = resource.spec?.containers || [];
+        const containerSelect = document.getElementById('container-select');
+        containerSelect.innerHTML = '<option value="">-- Choose Container --</option>';
+
+        if (containers.length === 1) {
+          // Single container - auto-select, hide dropdown, and auto-load logs
+          containerSelect.value = containers[0].name;
+          document.getElementById('container-selector').style.display = 'none';
+          // Auto-load logs when Logs tab is clicked (will be triggered by switchTab)
+        } else if (containers.length > 1) {
+          // Multi-container - show dropdown
+          containers.forEach(container => {
+            const option = document.createElement('option');
+            option.value = container.name;
+            option.textContent = container.name;
+            containerSelect.appendChild(option);
+          });
+          document.getElementById('container-selector').style.display = 'block';
+          document.getElementById('logs-content').textContent = 'Please select a container to view logs.';
+          document.getElementById('logs-loading').style.display = 'none';
+          document.getElementById('logs-error').style.display = 'none';
+        } else {
+          // No containers (shouldn't happen)
+          logsTabButton.style.display = 'none';
+        }
+      } else {
+        // Not a pod - hide logs tab
+        logsTabButton.style.display = 'none';
+      }
+
       document.getElementById('detail-panel').classList.add('visible');
+      feather.replace(); // Re-render Feather icons including new terminal icon
     }
-    function closeDetail() { document.getElementById('detail-panel').classList.remove('visible'); }
+    function closeDetail() {
+      // Close log stream
+      if (logSocket) {
+        logSocket.close();
+        logSocket = null;
+      }
+      currentLogPod = null;
+
+      document.getElementById('detail-panel').classList.remove('visible');
+    }
+
     function switchTab(tabName) {
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
       event.target.classList.add('active');
       document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
       document.getElementById(`${tabName}-tab`).classList.add('active');
+
+      // Auto-load logs when switching to logs tab for single-container pods
+      if (tabName === 'logs') {
+        const containerSelect = document.getElementById('container-select');
+        if (containerSelect.value) {
+          // Container is already selected (single-container pod), load logs
+          loadLogs();
+        }
+      } else {
+        // Close log stream when leaving logs tab
+        if (logSocket) {
+          logSocket.close();
+          logSocket = null;
+        }
+        currentLogPod = null;
+      }
     }
 
     // ---------- Main tab switching ----------
