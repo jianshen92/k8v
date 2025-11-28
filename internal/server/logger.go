@@ -26,10 +26,10 @@ func NewLogger() (*Logger, error) {
 		return nil, fmt.Errorf("failed to create logs directory: %w", err)
 	}
 
-	// Use single log file
+	// Use single log file (truncate on each run)
 	logPath := filepath.Join(logsDir, "k8v.log")
 
-	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_APPEND, 0644)
+	file, err := os.OpenFile(logPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0644)
 	if err != nil {
 		return nil, fmt.Errorf("failed to open log file: %w", err)
 	}

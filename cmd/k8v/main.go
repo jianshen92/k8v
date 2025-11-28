@@ -32,6 +32,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to create Kubernetes client: %v", err)
 	}
+	client.SetLogger(logger)
 	logger.Printf("✓ Connected to Kubernetes cluster")
 
 	// Create resource cache
@@ -59,12 +60,10 @@ func main() {
 	client.Start(stopCh)
 	logger.Printf("✓ Informers started")
 
-	// Wait for informer caches to sync
-	logger.Printf("Waiting for informer caches to sync...")
+	// Wait for informer caches to sync (logging is done inside WaitForCacheSync)
 	if !client.WaitForCacheSync(stopCh) {
 		log.Fatal("Failed to sync informer caches")
 	}
-	logger.Printf("✓ Informer caches synced")
 
 	// Create and start HTTP server
 	srv, err := server.NewServerWithHub(*port, watcher, hub, logHub)
