@@ -1,7 +1,6 @@
 package server
 
 import (
-	"log"
 	"net/http"
 	"sync"
 
@@ -23,6 +22,7 @@ type Client struct {
 	hub          *Hub
 	namespace    string // namespace filter ("" = all namespaces)
 	resourceType string // resource type filter ("" = all types)
+	logger       *Logger
 }
 
 // Hub manages all active WebSocket connections
@@ -32,15 +32,17 @@ type Hub struct {
 	register   chan *Client
 	unregister chan *Client
 	mu         sync.RWMutex
+	logger     *Logger
 }
 
 // NewHub creates a new Hub
-func NewHub() *Hub {
+func NewHub(logger *Logger) *Hub {
 	return &Hub{
 		clients:    make(map[*Client]bool),
 		broadcast:  make(chan k8s.ResourceEvent, 256),
 		register:   make(chan *Client),
 		unregister: make(chan *Client),
+		logger:     logger,
 	}
 }
 
@@ -52,7 +54,7 @@ func (h *Hub) Run() {
 			h.mu.Lock()
 			h.clients[client] = true
 			h.mu.Unlock()
-			log.Printf("Client connected (total: %d)\n", len(h.clients))
+			h.logger.Printf("[WebSocket] Client connected (total: %d)", len(h.clients))
 
 		case client := <-h.unregister:
 			h.mu.Lock()
@@ -61,7 +63,7 @@ func (h *Hub) Run() {
 				close(client.send)
 			}
 			h.mu.Unlock()
-			log.Printf("Client disconnected (total: %d)\n", len(h.clients))
+			h.logger.Printf("[WebSocket] Client disconnected (total: %d)", len(h.clients))
 
 		case event := <-h.broadcast:
 			h.mu.RLock()
@@ -98,7 +100,7 @@ func (h *Hub) Broadcast(event k8s.ResourceEvent) {
 func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("WebSocket upgrade failed: %v", err)
+		s.logger.Printf("[WebSocket] Upgrade failed: %v", err)
 		return
 	}
 
@@ -114,7 +116,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		resourceType = "" // Empty string = all types
 	}
 
-	log.Printf("New WebSocket connection with filters - namespace: '%s', type: '%s'", namespace, resourceType)
+	s.logger.Printf("[WebSocket] New connection with filters - namespace: '%s', type: '%s'", namespace, resourceType)
 
 	client := &Client{
 		conn:         conn,
@@ -122,19 +124,20 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 		hub:          s.hub,
 		namespace:    namespace,
 		resourceType: resourceType,
+		logger:       s.logger,
 	}
 
 	s.hub.register <- client
 
 	// Send initial snapshot of resources (filtered by namespace and type) synchronously before starting pumps
 	snapshot := s.watcher.GetSnapshotFilteredByType(namespace, resourceType)
-	log.Printf("Sending filtered snapshot of %d resources (namespace=%s, type=%s) to new client", len(snapshot), namespace, resourceType)
+	s.logger.Printf("[WebSocket] Sending filtered snapshot of %d resources (namespace=%s, type=%s) to new client", len(snapshot), namespace, resourceType)
 
 	// Log first few resources in snapshot for debugging
 	if len(snapshot) > 0 && len(snapshot) <= 10 {
-		log.Printf("Snapshot resources:")
+		s.logger.Printf("[WebSocket] Snapshot resources:")
 		for _, event := range snapshot {
-			log.Printf("  - %s/%s (type:%s)", event.Resource.Namespace, event.Resource.Name, event.Resource.Type)
+			s.logger.Printf("[WebSocket]   - %s/%s (type:%s)", event.Resource.Namespace, event.Resource.Name, event.Resource.Type)
 		}
 	}
 
@@ -143,17 +146,17 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	for i, event := range snapshot {
 		err := conn.WriteJSON(event)
 		if err != nil {
-			log.Printf("Failed to send snapshot event %d/%d: %v", i+1, len(snapshot), err)
+			s.logger.Printf("[WebSocket] Failed to send snapshot event %d/%d: %v", i+1, len(snapshot), err)
 			conn.Close()
 			s.hub.unregister <- client
 			return
 		}
 		// Log progress every batch
 		if (i+1)%batchSize == 0 {
-			log.Printf("Snapshot progress: %d/%d resources sent", i+1, len(snapshot))
+			s.logger.Printf("[WebSocket] Snapshot progress: %d/%d resources sent", i+1, len(snapshot))
 		}
 	}
-	log.Printf("Snapshot sent successfully: %d resources", len(snapshot))
+	s.logger.Printf("[WebSocket] Snapshot sent successfully: %d resources", len(snapshot))
 
 	// Start goroutines for read/write
 	go client.writePump()
@@ -187,7 +190,7 @@ func (c *Client) writePump() {
 			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
 				return
 			}
-			log.Printf("Write error: %v", err)
+			c.logger.Printf("[WebSocket] Write error: %v", err)
 			return
 		}
 	}

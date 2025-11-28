@@ -815,6 +815,186 @@ DOM Update
 
 ---
 
+## 6.8. Server Logging and Debugging
+
+### What Was Implemented
+
+The server includes comprehensive logging to help with debugging, monitoring, and understanding server behavior. All logs are written to both **stdout** and a persistent log file.
+
+✅ **Logger Implementation** (`internal/server/logger.go`)
+- Multi-writer logger (stdout + file)
+- Single log file: `logs/k8v.log`
+- Session markers with timestamps
+- Graceful shutdown logging
+
+✅ **HTTP Request Logging Middleware**
+- Every HTTP request logged with:
+  - Remote address
+  - HTTP method and path
+  - Status code
+  - Request duration
+- Format: `[::1]:41768 GET /ws - 500 - 174.853µs`
+
+✅ **WebSocket Connection Logging**
+- Connection/disconnection events with client counts
+- Filter parameters (namespace, resource type)
+- Snapshot transmission progress
+- Error messages with context
+- Tagged with `[WebSocket]` prefix
+
+✅ **Log Streaming Logging**
+- Pod log streaming events
+- Container selection tracking
+- Tagged with `[LogStream]` and `[LogHub]` prefixes
+
+### Log File Location
+
+```
+logs/
+└── k8v.log  # Single append-only log file
+```
+
+### Log Format
+
+Each server session is marked with timestamps:
+```
+2025/11/29 02:11:56 === K8V Server Started (2025-11-29 02:11:56) ===
+2025/11/29 02:11:56 Connecting to Kubernetes cluster...
+2025/11/29 02:11:56 ✓ Connected to Kubernetes cluster
+...
+2025/11/29 02:15:30 === K8V Server Stopped ===
+```
+
+### Debugging with Logs
+
+**1. Check for Errors**
+```bash
+# View all errors
+grep -i error logs/k8v.log
+
+# View recent errors (last 50 lines)
+tail -50 logs/k8v.log | grep -i error
+```
+
+**2. Monitor HTTP Requests**
+```bash
+# View all HTTP requests
+grep "GET\|POST\|PUT\|DELETE" logs/k8v.log
+
+# Find failed requests (4xx/5xx status codes)
+grep " - [45][0-9][0-9] - " logs/k8v.log
+```
+
+**3. Track WebSocket Issues**
+```bash
+# View WebSocket events
+grep "\[WebSocket\]" logs/k8v.log
+
+# Check connection/disconnection patterns
+grep "Client connected\|Client disconnected" logs/k8v.log
+
+# Find WebSocket errors
+grep "\[WebSocket\].*error\|Upgrade failed" logs/k8v.log
+```
+
+**4. Monitor Log Streaming**
+```bash
+# View log streaming events
+grep "\[LogStream\]\|\[LogHub\]" logs/k8v.log
+
+# Check for streaming errors
+grep "\[LogStream\].*error" logs/k8v.log
+```
+
+**5. Find Recent Sessions**
+```bash
+# List all server start times
+grep "=== K8V Server Started" logs/k8v.log
+
+# View only the latest session
+awk '/=== K8V Server Started/{p=1} p' logs/k8v.log | tail -100
+```
+
+**6. Real-time Monitoring**
+```bash
+# Watch logs in real-time
+tail -f logs/k8v.log
+
+# Watch only errors
+tail -f logs/k8v.log | grep --line-buffered -i error
+```
+
+### Common Issues and Log Patterns
+
+**WebSocket Connection Failures**
+```
+[WebSocket] Upgrade failed: websocket: response does not implement http.Hijacker
+```
+- **Cause:** Middleware not implementing `http.Hijacker` interface
+- **Fix:** Ensure `responseWriter` wrapper implements `Hijack()` method
+
+**Snapshot Transmission Issues**
+```
+[WebSocket] Failed to send snapshot event 1234/5000: write: broken pipe
+```
+- **Cause:** Client disconnected during snapshot transmission
+- **Fix:** Normal behavior, client reconnection will retry
+
+**High Request Duration**
+```
+[::1]:41822 GET /api/stats - 200 - 5.234s
+```
+- **Cause:** Slow Kubernetes API response or large cluster
+- **Impact:** May indicate performance bottleneck
+
+**Connection Spikes**
+```
+[WebSocket] Client connected (total: 50)
+```
+- **Monitor:** Unusual client counts may indicate reconnection storms
+- **Action:** Check frontend reconnection logic
+
+### Using Logs for Debugging (For Claude)
+
+When debugging issues, Claude should:
+
+1. **Read the log file** first: `Read /home/user/code/k8v/logs/k8v.log`
+2. **Identify error patterns**: Look for repeated errors or error sequences
+3. **Check timestamps**: Correlate errors with user actions
+4. **Trace request flow**: Follow HTTP → WebSocket → Backend chain
+5. **Examine context**: Look at logs before/after the error
+
+**Example debugging workflow:**
+```
+1. User reports: "Pod logs not loading"
+2. Claude reads: logs/k8v.log
+3. Claude searches: "[LogStream]" patterns
+4. Claude finds: "Streaming error for default/pod-1/container: pod not found"
+5. Claude identifies: Pod may have been deleted or namespace mismatch
+6. Claude suggests: Verify pod exists, check namespace filter
+```
+
+### Log File Management
+
+**The log file is append-only and not rotated automatically.**
+
+To prevent unbounded growth:
+```bash
+# Check log file size
+ls -lh logs/k8v.log
+
+# Manually truncate (backup first!)
+cp logs/k8v.log logs/k8v.log.backup
+> logs/k8v.log
+
+# Or use logrotate (optional)
+# Add to /etc/logrotate.d/k8v
+```
+
+**Note:** The `logs/` directory is gitignored.
+
+---
+
 ## 7. Phase 1 Complete (Production Backend + Minimal Frontend)
 
 ### What Was Built
@@ -992,6 +1172,8 @@ DOM Update
 
 16. **Modular Frontend Architecture:** Splitting the frontend into ES6 modules (config, state, ws, app) dramatically improves maintainability and developer experience. Each module has a single responsibility, making it easy to locate and modify specific functionality. The data-centric approach (separating state and configuration from logic) makes the codebase more testable and extensible.
 
+17. **Persistent Logging is Essential for Debugging:** Writing all server activity (HTTP requests, WebSocket events, errors) to a persistent log file (`logs/k8v.log`) enables effective debugging across sessions. Claude can read the log file to diagnose issues, identify patterns, and understand the sequence of events leading to errors. Logging middleware must implement `http.Hijacker` interface to support WebSocket upgrades.
+
 ---
 
 ## 10. Maintaining This Document
@@ -1047,4 +1229,4 @@ When making changes, update the relevant sections:
 
 ---
 
-**Last Updated:** 2025-11-29 - Frontend Refactored: Split into modular ES6 architecture (config.js, state.js, ws.js, app.js, dropdown.js). Added fullscreen mode for detail panel. Improved UI consistency with Feather icons for all buttons.
+**Last Updated:** 2025-11-29 - Added comprehensive server logging system (`logs/k8v.log`) for debugging. Implemented HTTP request logging middleware with WebSocket support (Hijacker interface). Frontend refactored into modular ES6 architecture. Added fullscreen mode for detail panel.

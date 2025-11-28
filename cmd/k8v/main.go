@@ -19,24 +19,31 @@ func main() {
 
 	log.Println("Starting k8v - Kubernetes Visualizer")
 
+	// Create logger for server
+	logger, err := server.NewLogger()
+	if err != nil {
+		log.Fatalf("Failed to create logger: %v", err)
+	}
+	defer logger.Close()
+
 	// Create Kubernetes client
-	log.Println("Connecting to Kubernetes cluster...")
+	logger.Printf("Connecting to Kubernetes cluster...")
 	client, err := k8s.NewClient()
 	if err != nil {
 		log.Fatalf("Failed to create Kubernetes client: %v", err)
 	}
-	log.Println("✓ Connected to Kubernetes cluster")
+	logger.Printf("✓ Connected to Kubernetes cluster")
 
 	// Create resource cache
 	cache := k8s.NewResourceCache()
-	log.Println("✓ Resource cache initialized")
+	logger.Printf("✓ Resource cache initialized")
 
 	// Create hub for WebSocket broadcasting
-	hub := server.NewHub()
+	hub := server.NewHub(logger)
 	go hub.Run()
 
 	// Create log hub for log streaming
-	logHub := server.NewLogHub()
+	logHub := server.NewLogHub(logger)
 	go logHub.Run()
 
 	// Create watcher with event handler that broadcasts to hub
@@ -45,22 +52,26 @@ func main() {
 	if err != nil {
 		log.Fatalf("Failed to start watcher: %v", err)
 	}
-	log.Println("✓ Watcher initialized")
+	logger.Printf("✓ Watcher initialized")
 
 	// Start informers
 	stopCh := make(chan struct{})
 	client.Start(stopCh)
-	log.Println("✓ Informers started")
+	logger.Printf("✓ Informers started")
 
 	// Wait for informer caches to sync
-	log.Println("Waiting for informer caches to sync...")
+	logger.Printf("Waiting for informer caches to sync...")
 	if !client.WaitForCacheSync(stopCh) {
 		log.Fatal("Failed to sync informer caches")
 	}
-	log.Println("✓ Informer caches synced")
+	logger.Printf("✓ Informer caches synced")
 
 	// Create and start HTTP server
-	srv := server.NewServerWithHub(*port, watcher, hub, logHub)
+	srv, err := server.NewServerWithHub(*port, watcher, hub, logHub)
+	if err != nil {
+		log.Fatalf("Failed to create server: %v", err)
+	}
+	defer srv.Close()
 
 	// Handle shutdown gracefully
 	go func() {
@@ -68,13 +79,14 @@ func main() {
 		signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
 		<-sigCh
 
-		log.Println("\nShutting down...")
+		logger.Printf("\nShutting down...")
 		close(stopCh)
+		srv.Close()
 		os.Exit(0)
 	}()
 
 	// Start server (blocking)
-	log.Printf("✓ Server starting on http://localhost:%d\n", *port)
+	logger.Printf("✓ Server starting on http://localhost:%d", *port)
 	fmt.Printf("\n🚀 K8V is running! Open http://localhost:%d in your browser\n\n", *port)
 
 	if err := srv.Start(); err != nil {

@@ -3,7 +3,6 @@ package server
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"sync"
 
@@ -18,6 +17,7 @@ type LogClient struct {
 	send   chan k8s.LogMessage
 	hub    *LogHub
 	podKey string // "namespace/pod/container"
+	logger *Logger
 }
 
 // LogHub manages all active log streaming WebSocket connections
@@ -27,15 +27,17 @@ type LogHub struct {
 	register   chan *LogClient
 	unregister chan *LogClient
 	mu         sync.RWMutex
+	logger     *Logger
 }
 
 // NewLogHub creates a new LogHub
-func NewLogHub() *LogHub {
+func NewLogHub(logger *Logger) *LogHub {
 	return &LogHub{
 		clients:    make(map[*LogClient]bool),
 		broadcast:  make(chan k8s.LogMessage, 256),
 		register:   make(chan *LogClient),
 		unregister: make(chan *LogClient),
+		logger:     logger,
 	}
 }
 
@@ -47,7 +49,7 @@ func (h *LogHub) Run() {
 			h.mu.Lock()
 			h.clients[client] = true
 			h.mu.Unlock()
-			log.Printf("[LogHub] Client connected: %s (total: %d)\n", client.podKey, len(h.clients))
+			h.logger.Printf("[LogHub] Client connected: %s (total: %d)", client.podKey, len(h.clients))
 
 		case client := <-h.unregister:
 			h.mu.Lock()
@@ -56,7 +58,7 @@ func (h *LogHub) Run() {
 				close(client.send)
 			}
 			h.mu.Unlock()
-			log.Printf("[LogHub] Client disconnected: %s (total: %d)\n", client.podKey, len(h.clients))
+			h.logger.Printf("[LogHub] Client disconnected: %s (total: %d)", client.podKey, len(h.clients))
 
 		case message := <-h.broadcast:
 			h.mu.RLock()
@@ -90,12 +92,12 @@ func (s *Server) handleLogsWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Upgrade connection
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		log.Printf("WebSocket upgrade failed: %v", err)
+		s.logger.Printf("[LogStream] WebSocket upgrade failed: %v", err)
 		return
 	}
 
 	podKey := fmt.Sprintf("%s/%s/%s", namespace, pod, container)
-	log.Printf("[LogStream] New connection: %s", podKey)
+	s.logger.Printf("[LogStream] New connection: %s", podKey)
 
 	// Create client
 	client := &LogClient{
@@ -103,6 +105,7 @@ func (s *Server) handleLogsWebSocket(w http.ResponseWriter, r *http.Request) {
 		send:   make(chan k8s.LogMessage, 1000),
 		hub:    s.logHub,
 		podKey: podKey,
+		logger: s.logger,
 	}
 
 	s.logHub.register <- client
@@ -114,7 +117,7 @@ func (s *Server) handleLogsWebSocket(w http.ResponseWriter, r *http.Request) {
 	go func() {
 		err := s.watcher.StreamPodLogs(ctx, namespace, pod, container, s.logHub.broadcast)
 		if err != nil {
-			log.Printf("[LogStream] Streaming error for %s: %v", podKey, err)
+			s.logger.Printf("[LogStream] Streaming error for %s: %v", podKey, err)
 			// Send error message to client
 			s.logHub.broadcast <- k8s.LogMessage{
 				Type:  "LOG_ERROR",
@@ -152,7 +155,7 @@ func (c *LogClient) writePump() {
 	for message := range c.send {
 		if err := c.conn.WriteJSON(message); err != nil {
 			if !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
-				log.Printf("[LogStream] Write error for %s: %v", c.podKey, err)
+				c.logger.Printf("[LogStream] Write error for %s: %v", c.podKey, err)
 			}
 			return
 		}
