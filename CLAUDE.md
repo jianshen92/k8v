@@ -17,17 +17,20 @@ K8v is a Kubernetes cluster visualization tool designed to be like k9s but with 
 - Pod logs viewing and resource inspection
 
 **Current State:**
-- **Stage:** ✅ Phase 3 Ongoing - Advanced Filtering & Performance Optimization
+- **Stage:** ✅ Phase 3 Nearly Complete - Core Features Implemented
 - **What exists:**
   - Production Go backend with Informers, WebSocket streaming, and generic relationship system
   - Polished web UI with real-time updates and optimized rendering
   - Bidirectional relationship navigation
   - **Namespace filtering**: Server-side filtering with searchable dropdown UI
   - **Resource type lazy loading**: Instant stats + filtered WebSocket snapshots
+  - **Pod logs viewer**: Real-time log streaming with auto-select first container
+  - **Search functionality**: Quick search by name with keyboard shortcut (/)
+  - **Multi-context support**: Switch between clusters without restarting
   - **Performance optimized**: 40-100x network reduction for large clusters
   - Single 62MB binary (k8v) ready to use
   - Tested with large production clusters (21,000+ resources)
-- **Next:** Pod logs viewing, search functionality, and additional resource types
+- **Next:** Enhanced YAML view, additional resource types, and virtual scrolling
 
 ---
 
@@ -507,12 +510,13 @@ go client.readPump()
 
 1. ~~**Frontend lag with large clusters**~~ - ✅ **PARTIALLY FIXED** Lazy loading by resource type reduces load significantly (virtualization still future work)
 2. ~~**No namespace filtering**~~ - ✅ **COMPLETED** Server-side namespace filtering with searchable dropdown
-3. **No pod logs viewing** - Cannot view container logs yet (High priority)
-4. **Basic YAML view** - No syntax highlighting or clickable references (Future)
-5. **No search functionality** - Cannot search by name or labels yet (Future)
-6. **Limited resource types** - Only 7 core types (StatefulSets, DaemonSets, etc. in Future)
-7. **No multi-cluster support** - Single context only (Future)
+3. ~~**No pod logs viewing**~~ - ✅ **COMPLETED** Real-time log streaming with container selection and auto-select
+4. ~~**No search functionality**~~ - ✅ **COMPLETED** Search by name with keyboard shortcut (/)
+5. ~~**No multi-cluster support**~~ - ✅ **COMPLETED** Context switching with reactive state management
+6. **Basic YAML view** - No syntax highlighting or clickable references (Future)
+7. **Limited resource types** - Only 7 core types (StatefulSets, DaemonSets, etc. in Future)
 8. **Topology view not implemented** - Placeholder shown (Future)
+9. **Limited search scope** - Cannot search by labels or annotations yet (Future)
 
 ---
 
@@ -1165,6 +1169,220 @@ cp logs/k8v.log logs/k8v.log.backup
 
 ---
 
+## 6.9. Phase 3 Continued (Core MVP Features - 2025-11-30)
+
+### What Was Built
+
+Three major features completed, fulfilling the core MVP requirements from IDEAS.md.
+
+✅ **Pod Logs Viewer**
+- Real-time log streaming via WebSocket
+- Container selection for multi-container pods
+- Auto-select first container (saves user a click)
+- Integrated into detail panel as "Logs" tab
+- Connection state indicators (loading, error, closed)
+- Log hub pattern for managing concurrent streams
+
+✅ **Search Functionality**
+- Keyboard shortcut `/` to activate (vim/GitHub style)
+- Real-time filtering as user types
+- Search by resource name (case-insensitive)
+- Clear button and Escape key to exit
+- Respects namespace and resource type filters
+
+✅ **Multi-Context Support**
+- Context dropdown in header with searchable UI
+- Switch between clusters without restarting
+- Reactive state management with `SYNC_STATUS` events
+- Loading overlay during cache sync
+- Automatic namespace reset on context switch
+
+### Technical Implementation
+
+**Pod Logs Viewer**
+
+Backend files:
+- `internal/server/logstream.go` - WebSocket handler for log streaming
+- `internal/server/loghub.go` - Hub pattern for managing multiple log streams
+- `internal/k8s/client.go` - `StreamPodLogs()` method using K8s client
+
+Key features:
+- Tail 100 lines on connection
+- Follow mode for real-time streaming
+- Message types: `LOG_LINE`, `LOG_END`, `LOG_ERROR`
+- Clean disconnection when switching pods
+
+Frontend integration (`app.js`):
+```javascript
+loadLogs() {
+  const container = this.containerDropdown.getValue();
+  const wsUrl = `${wsProtocol}//${host}/ws/logs?namespace=${ns}&pod=${pod}&container=${container}`;
+
+  this.state.log.socket = new WebSocket(wsUrl);
+  this.state.log.socket.onmessage = (event) => {
+    const message = JSON.parse(event.data);
+    if (message.type === 'LOG_LINE') {
+      this.appendLogLine(message.line);
+    }
+  };
+}
+
+// Auto-select first container
+if (containers.length > 1) {
+  this.containerDropdown.setValue(containers[0].name);
+  if (this.state.ui.activeDetailTab === 'logs') {
+    this.loadLogs();
+  }
+}
+```
+
+**Search Functionality**
+
+Frontend implementation (`app.js`):
+```javascript
+// Keyboard shortcut
+handleGlobalKeydown(event) {
+  if (event.key === '/' && !isInputFocused) {
+    event.preventDefault();
+    this.activateSearch();
+  }
+  if (event.key === 'Escape' && this.state.ui.searchActive) {
+    this.clearSearch();
+  }
+}
+
+// Real-time filtering
+handleSearchInput(event) {
+  this.state.filters.search = event.target.value.toLowerCase().trim();
+  this.renderResourceList(); // Filters applied here
+}
+
+// Filter integration
+renderResourceList() {
+  const list = Array.from(this.state.resources.values())
+    .filter(r => {
+      if (r.type !== this.state.filters.type) return false;
+      if (this.state.filters.search && !r.name.toLowerCase().includes(this.state.filters.search)) {
+        return false;
+      }
+      return true;
+    });
+}
+```
+
+**Multi-Context Support**
+
+Backend files:
+- `internal/server/app.go` - `SwitchContext()` method, `SYNC_STATUS` broadcasting
+- `internal/server/handlers.go` - `/api/contexts`, `/api/context/current`, `/api/context/switch` endpoints
+
+Key architecture:
+- `App.context` is the single source of truth (not kubeconfig's "current" field)
+- `SwitchContext()` stops old watcher, starts new watcher, waits for cache sync
+- Broadcasts `SYNC_STATUS` events during sync lifecycle
+
+Frontend integration (`app.js`):
+```javascript
+// Get actual backend context (not kubeconfig)
+async fetchCurrentContext() {
+  const response = await fetch('/api/context/current');
+  const data = await response.json();
+  this.contextDropdown.setValue(data.context);
+}
+
+// Switch context
+async switchContext(newContext) {
+  await fetch(`/api/context/switch?context=${newContext}`, { method: 'POST' });
+
+  // Reset state
+  resetForNewConnection(this.state);
+  this.renderResourceList();
+
+  // Reset namespace to "all"
+  this.state.filters.namespace = 'all';
+  localStorage.setItem('k8v-namespace', 'all');
+  this.namespaceDropdown.setValue('all');
+
+  // Reconnect (SYNC_STATUS will trigger data refresh)
+  this.wsManager.connect();
+}
+
+// Reactive data refresh
+handleSyncStatus(syncEvent) {
+  if (syncEvent.synced && !syncEvent.syncing) {
+    this.fetchNamespaces();     // Get new context's namespaces
+    this.fetchAndDisplayStats(); // Get new context's stats
+  }
+}
+```
+
+### UX Improvements
+
+1. **Pod Logs**:
+   - No need to leave UI or use `kubectl logs`
+   - First container auto-selected for convenience
+   - Real-time streaming for debugging
+
+2. **Search**:
+   - Keyboard-first navigation (`/` shortcut)
+   - Instant feedback as you type
+   - Works seamlessly with other filters
+
+3. **Context Switching**:
+   - No restart required
+   - Loading overlay shows sync progress
+   - Fresh data guaranteed by reactive updates
+
+### Architecture Patterns
+
+**Reactive State Management**:
+- Backend broadcasts state changes via WebSocket events
+- Frontend reacts to events, never polls or guesses
+- Single source of truth on backend, UI is always in sync
+
+**Event-Driven Data Flow**:
+```
+User switches context
+  ↓
+POST /api/context/switch
+  ↓
+Backend: Stop old watcher → Start new → WaitForCacheSync
+  ↓
+Broadcast: SYNC_STATUS syncing=true → Show loading overlay
+  ↓
+Backend: Cache synced
+  ↓
+Broadcast: SYNC_STATUS synced=true
+  ↓
+Frontend: handleSyncStatus() → Fetch namespaces & stats
+  ↓
+UI updated with fresh data
+```
+
+**Separation of Concerns**:
+- Backend owns K8s state and cluster connections
+- Frontend owns UI state and user interactions
+- WebSocket bridges the two with typed messages
+
+### Impact on MVP
+
+These features complete the core MVP requirements from IDEAS.md:
+- ✅ Resource Visualization (Phase 1)
+- ✅ Live Streaming (Phase 1)
+- ✅ Relationship Mapping (Phase 1)
+- ✅ Pod Logs Viewing (Phase 3) ← **Completed**
+- ✅ Search Functionality (Phase 3) ← **Completed**
+- ✅ Multi-Context Support (Phase 3) ← **Completed**
+- ✅ Top-Tier UI (Phase 2)
+- ✅ Extensible Data Model (Phase 1)
+
+**Remaining for full Phase 3**:
+- Enhanced YAML view (syntax highlighting, clickable refs)
+- Virtual scrolling for massive resource lists
+- Enhanced search (by labels/annotations)
+
+---
+
 ## 7. Phase 1 Complete (Production Backend + Minimal Frontend)
 
 ### What Was Built
@@ -1216,37 +1434,24 @@ cp logs/k8v.log logs/k8v.log.backup
 
 ### What's Next (Phase 3 and Beyond)
 
-**Phase 3 Priorities:**
+**Remaining Phase 3 Tasks:**
 
-1. **Frontend Performance Optimization**
-   - Virtual scrolling/pagination for large resource lists (1000+ resources)
-   - Lazy rendering to prevent lag with many resources
-   - Debounced updates during rapid event streams
-   - Memory optimization for long-running sessions
-
-2. **Namespace Filtering**
-   - Namespace selector dropdown
-   - Filter resources by namespace(s)
-   - Reduce frontend load by hiding unwanted namespaces
-   - Persist namespace filter preference
-
-3. **Pod Logs Viewer**
-   - Stream logs via WebSocket
-   - Log viewer in detail panel
-   - Follow mode for live logs
-   - Log search and filtering
-   - Container selection for multi-container pods
-
-4. **Enhanced YAML View**
+1. **Enhanced YAML View**
    - Syntax highlighting for YAML
    - Clickable resource references in YAML (e.g., click ConfigMap name → navigate to ConfigMap)
    - Highlight relationship fields (ownerReferences, selectors, etc.)
    - Copy specific YAML sections
 
-5. **Search Functionality**
-   - Search by resource name
-   - Filter by labels and annotations
-   - Quick navigation to specific resources
+2. **Frontend Performance Optimization**
+   - Virtual scrolling/pagination for large resource lists (1000+ resources)
+   - Lazy rendering to prevent lag with many resources
+   - Debounced updates during rapid event streams
+   - Memory optimization for long-running sessions
+
+3. **Enhanced Search**
+   - Search by labels and annotations (currently only searches by name)
+   - Advanced filtering options
+   - Search history
 
 **Future Enhancements:**
 
@@ -1274,7 +1479,7 @@ cp logs/k8v.log logs/k8v.log.backup
 
 | Aspect | Details |
 |--------|---------|
-| **Current Stage** | ✅ Phase 3 Complete - Advanced filtering, performance optimization, modular frontend |
+| **Current Stage** | ✅ Phase 3 Nearly Complete - Core features implemented |
 | **Tech Stack** | Go backend + Modular ES6 frontend (no frameworks) |
 | **Frontend Architecture** | 7 ES6 modules: app.js, config.js, state.js, ws.js, dropdown.js, style.css, index.html |
 | **Backend Language** | Go 1.23+ with client-go v0.31.0 |
@@ -1283,7 +1488,7 @@ cp logs/k8v.log logs/k8v.log.backup
 | **Deployment Model** | Single 62MB binary (`./k8v` command) |
 | **Similar Tools** | k9s (TUI), Lens (Electron), kubectl proxy (proxy-only) |
 | **Core Resources** | Pods, Deployments, Services, Ingress, ReplicaSets, ConfigMaps, Secrets |
-| **MVP Status** | ✅ Resource visualization, ✅ Relationships, ✅ Live streaming, ✅ Pod logs |
+| **MVP Status** | ✅ Visualization, ✅ Relationships, ✅ Live streaming, ✅ Pod logs, ✅ Search, ✅ Multi-context |
 | **UI** | ✅ Complete - Modular architecture with incremental updates |
 | **POC** | ✅ Complete (k8v-poc validates streaming architecture) |
 | **Data Model** | ✅ Complete - Generic relationship system implemented |
@@ -1399,4 +1604,4 @@ When making changes, update the relevant sections:
 
 ---
 
-**Last Updated:** 2025-11-30 - Fixed three critical context switching bugs: (1) Context dropdown revert on page refresh, (2) Resource counts not updating after switch, (3) Namespaces not repopulating. Implemented reactive event-driven data updates using `SYNC_STATUS synced=true` events. Added automatic namespace reset to "all" on context switch. Maintained data-centric reactive paradigm with single source of truth (`App.context`).
+**Last Updated:** 2025-11-30 - Completed three major MVP features: (1) **Pod logs viewer** with real-time WebSocket streaming, container selection, and auto-select first container, (2) **Search functionality** with keyboard shortcut (/) and real-time filtering by name, (3) **Multi-context support** with context dropdown UI, backend API, and reactive state synchronization. These features complete the core functionality requirements from IDEAS.md. Phase 3 is now nearly complete with all essential features implemented.

@@ -14,6 +14,9 @@ k8v is a **single-binary CLI tool** that connects to your Kubernetes cluster and
 
 ✅ **Real-time Updates** - Live streaming of cluster changes via WebSocket
 ✅ **Resource Visualization** - View Pods, Deployments, Services, Ingress, ReplicaSets, ConfigMaps, Secrets
+✅ **Pod Logs Viewer** - Stream and view container logs in real-time with auto-selected first container
+✅ **Search Functionality** - Quick search by resource name with keyboard shortcut (/)
+✅ **Multi-Context Support** - Switch between Kubernetes contexts with reactive state management
 ✅ **Namespace Filtering** - Server-side filtering with searchable dropdown and keyboard navigation
 ✅ **Relationship Mapping** - Click any resource to see bidirectional relationships
 ✅ **Scale Tested** - Handles 20,000+ resources smoothly
@@ -160,16 +163,18 @@ kubectl config use-context my-cluster
 ### 🚧 Phase 3 (In Progress)
 - ✅ **Namespace Filtering:** Server-side filtering with searchable dropdown, keyboard navigation, and localStorage persistence (200x network reduction)
 - ✅ **Icon Consistency:** Replaced emojis with Feather Icons for cohesive glassmorphic design
-- **Pod Logs Viewer:** Stream and view pod logs in real-time
+- ✅ **Pod Logs Viewer:** Real-time log streaming via WebSocket with container selection and auto-select first container
+- ✅ **Search Functionality:** Search resources by name with keyboard shortcut (/) and real-time filtering
+- ✅ **Multi-Context Support:** Switch between Kubernetes contexts with reactive state synchronization
 - **Enhanced YAML View:** Syntax highlighting and clickable resource references
-- **Search Functionality:** Search by name, labels, and annotations
 - **Frontend Performance:** Virtual scrolling and lazy rendering for massive clusters
 
 ### 📋 Future
 - Additional K8s resources (StatefulSets, DaemonSets, Jobs, PVs, etc.)
-- Multi-cluster support (context switching)
+- Enhanced search (by labels and annotations)
 - Topology graph view (relationship visualization)
 - Resource editing (kubectl apply)
+- YAML syntax highlighting and clickable references
 - YAML export/download
 - Custom resource definitions (CRDs)
 - Events timeline with filtering

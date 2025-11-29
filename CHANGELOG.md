@@ -8,6 +8,159 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## [Phase 3 Continued] - 2025-11-30
 
+### 🎉 New Features - Pod Logs, Search, and Context Switching
+
+Three major features completed, bringing k8v closer to feature parity with k9s.
+
+### Added
+- **Pod Logs Viewer** - Real-time log streaming for debugging and monitoring
+  - WebSocket-based log streaming via `/ws/logs` endpoint
+  - Container selection dropdown for multi-container pods
+  - Auto-select first container by default (saves user a click)
+  - Log viewer integrated into detail panel as "Logs" tab
+  - Real-time log streaming with `LOG_LINE`, `LOG_END`, and `LOG_ERROR` message types
+  - Automatic scrolling to latest log line
+  - Connection state indicators (loading, error, closed)
+  - Log hub pattern for managing multiple concurrent log streams
+  - Clean disconnection when switching pods or closing detail panel
+
+- **Search Functionality** - Quick navigation to specific resources
+  - Keyboard shortcut `/` to activate search (like vim/GitHub)
+  - Real-time filtering of resource list as user types
+  - Search by resource name (case-insensitive)
+  - Clear button (`x`) to exit search mode
+  - Escape key to cancel search
+  - Respects current resource type and namespace filters
+  - Visual feedback with search icon and input field
+  - Skips activation when typing in other input fields
+
+- **Multi-Context Support** - Switch between Kubernetes clusters without restarting
+  - Context dropdown in header with searchable UI
+  - Backend API endpoints: `/api/contexts` (list), `/api/context/current` (get), `/api/context/switch` (POST)
+  - Reactive state management with `SYNC_STATUS` events
+  - Loading overlay during informer cache sync
+  - Automatic namespace reset to "all" on context switch
+  - Progress feedback during cluster connection
+  - Single source of truth: backend's `App.context` (not kubeconfig's "current")
+  - Event-driven data refresh when cache synced (no race conditions)
+  - Page refresh preserves backend context (no revert to kubeconfig)
+
+### Technical Details
+
+**Pod Logs Implementation**:
+- `internal/server/logstream.go`: Log streaming WebSocket handler
+  - `handleLogStream()`: WebSocket upgrade and stream management
+  - Message types: `LOG_LINE`, `LOG_END`, `LOG_ERROR`
+  - Tail 100 lines of logs on connection
+  - Follow mode for real-time updates
+- `internal/server/loghub.go`: Log hub for managing concurrent streams
+  - Separate hub from resource hub (different message patterns)
+  - Clean disconnection and resource cleanup
+- Frontend: `app.js` log viewer methods
+  - `loadLogs()`: Connect to log WebSocket
+  - `appendLogLine()`: Add log lines to UI
+  - `showLogError()`: Display error states
+  - Auto-select first container in multi-container pods (UX improvement)
+
+**Search Implementation**:
+- Frontend: `app.js` search methods
+  - `activateSearch()`: Show search input, focus
+  - `deactivateSearch()`: Clear search, hide input
+  - `handleSearchInput()`: Real-time filtering
+  - `handleGlobalKeydown()`: Keyboard shortcuts (`/`, `Escape`)
+  - `setupSearchFilter()`: Event listener wiring
+- UI: Search trigger button + active search field
+- State: `state.filters.search` and `state.ui.searchActive`
+- Filter integration: Works with namespace and resource type filters
+
+**Context Switching Implementation**:
+- Backend: `internal/server/app.go`
+  - `App.context`: Current running context (source of truth)
+  - `SwitchContext()`: Stop old watcher, start new watcher, wait for sync
+  - Broadcast `SYNC_STATUS` events during sync lifecycle
+- Backend: `internal/server/handlers.go`
+  - `handleContexts()`: List available contexts from kubeconfig
+  - `handleCurrentContext()`: Return current backend context
+  - `handleSwitchContext()`: POST endpoint to switch context
+- Frontend: `app.js` context methods
+  - `setupContextDropdown()`: Initialize dropdown component
+  - `fetchCurrentContext()`: Get actual backend state (not kubeconfig)
+  - `fetchAndDisplayContexts()`: Get available options
+  - `switchContext()`: POST to backend, reset state, reconnect
+  - `handleSyncStatus()`: Reactive data refresh when synced
+
+**Key Code Patterns**:
+```go
+// Log streaming WebSocket
+func (s *Server) handleLogStream(w http.ResponseWriter, r *http.Request) {
+  stream, err := s.k8sClient.StreamPodLogs(namespace, podName, containerName)
+  // ... send LOG_LINE messages via WebSocket
+}
+
+// Context switching with sync events
+func (a *App) SwitchContext(contextName string) error {
+  a.Stop()
+  a.watcher = k8s.NewWatcher(client)
+  go a.watcher.Start()
+  a.watcher.WaitForCacheSync()
+  a.BroadcastSyncStatus(synced=true)
+}
+```
+
+```javascript
+// Search activation with keyboard shortcut
+function handleGlobalKeydown(event) {
+  if (event.key === '/' && !isInputFocused) {
+    event.preventDefault();
+    activateSearch();
+  }
+}
+
+// Auto-select first container
+if (containers.length > 1) {
+  if (this.containerDropdown) {
+    this.containerDropdown.setValue(containers[0].name);
+  }
+  if (this.state.ui.activeDetailTab === 'logs') {
+    this.loadLogs();
+  }
+}
+
+// Context switching with reactive data refresh
+async switchContext(newContext) {
+  await fetch('/api/context/switch?context=' + newContext, { method: 'POST' });
+  resetForNewConnection(this.state);
+  this.wsManager.connect(); // SYNC_STATUS will trigger data refresh
+}
+
+function handleSyncStatus(syncEvent) {
+  if (syncEvent.synced && !syncEvent.syncing) {
+    this.fetchNamespaces();
+    this.fetchAndDisplayStats(); // Only fetch when cache ready
+  }
+}
+```
+
+### UX Improvements
+- **Pod logs**: No need to leave the UI or use `kubectl logs` commands
+- **Search**: Keyboard-first navigation (like vim/GitHub)
+- **Auto-select container**: Saves one click for common case
+- **Context switching**: No need to restart k8v or run `kubectl config use-context`
+- **Reactive updates**: UI always shows fresh data from current context
+
+### Impact
+These three features complete the core functionality requirements from IDEAS.md:
+- ✅ Real-time visualization
+- ✅ Resource relationships
+- ✅ Live streaming
+- ✅ Pod logs viewing (MVP requirement)
+- ✅ Search functionality
+- ✅ Multi-context support
+
+---
+
+## [Phase 3 Continued] - 2025-11-30
+
 ### 🐛 Bug Fixes - Context Switching State Synchronization
 
 Fixed three critical bugs related to context switching that violated the data-centric reactive paradigm.
