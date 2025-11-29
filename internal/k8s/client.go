@@ -178,6 +178,7 @@ func (c *Client) WaitForCacheSync(stopCh <-chan struct{}) bool {
 		"Ingresses":   c.InformerFactory.Networking().V1().Ingresses().Informer().HasSynced,
 		"ConfigMaps":  c.InformerFactory.Core().V1().ConfigMaps().Informer().HasSynced,
 		"Secrets":     c.InformerFactory.Core().V1().Secrets().Informer().HasSynced,
+		"Nodes":       c.InformerFactory.Core().V1().Nodes().Informer().HasSynced,
 	}
 
 	// Poll each informer until all are synced

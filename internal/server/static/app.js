@@ -282,6 +282,7 @@ class App {
       document.getElementById('stat-ingress').textContent = counts['Ingress'] || 0;
       document.getElementById('stat-configmap').textContent = counts['ConfigMap'] || 0;
       document.getElementById('stat-secret').textContent = counts['Secret'] || 0;
+      document.getElementById('stat-node').textContent = counts['Node'] || 0;
       document.getElementById('resource-count').textContent = `${counts.total || 0} resources`;
 
       console.log('[Stats] Loaded counts:', counts);

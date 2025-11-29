@@ -85,6 +85,7 @@ k8v-dropdown { position: relative; margin-top: 8px; display: block; }
 .resource-item.ingress::before { background: #FF9800; }
 .resource-item.replicaset::before { background: #00BCD4; }
 .resource-item.configmap::before, .resource-item.secret::before { background: #607D8B; }
+.resource-item.node::before { background: #795548; }
 
 .resource-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0; transition: all 0.3s; font-weight: 700; }
 .resource-item:hover .resource-icon { transform: scale(1.05); }
@@ -94,6 +95,7 @@ k8v-dropdown { position: relative; margin-top: 8px; display: block; }
 .resource-icon.ingress { background: rgba(255,152,0,0.2); color: #FFC107; box-shadow: 0 4px 12px rgba(255,152,0,0.2); }
 .resource-icon.replicaset { background: rgba(0,188,212,0.2); color: #00BCD4; box-shadow: 0 4px 12px rgba(0,188,212,0.2); }
 .resource-icon.configmap, .resource-icon.secret { background: rgba(96,125,139,0.2); color: #78909C; box-shadow: 0 4px 12px rgba(96,125,139,0.2); }
+.resource-icon.node { background: rgba(121,84,72,0.2); color: #A1887F; box-shadow: 0 4px 12px rgba(121,84,72,0.2); }
 
 .resource-header { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
 .resource-info { flex: 1; min-width: 0; }

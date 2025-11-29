@@ -116,6 +116,14 @@ func (w *Watcher) Start() error {
 		DeleteFunc: w.handleSecretDelete,
 	})
 
+	// Register Node handlers
+	nodeInformer := w.client.InformerFactory.Core().V1().Nodes().Informer()
+	nodeInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+		AddFunc:    w.handleNodeAdd,
+		UpdateFunc: w.handleNodeUpdate,
+		DeleteFunc: w.handleNodeDelete,
+	})
+
 	log.Println("All informer handlers registered")
 	return nil
 }
@@ -441,6 +449,53 @@ func (w *Watcher) handleSecretDelete(obj interface{}) {
 	}
 
 	id := types.BuildID("Secret", secret.Namespace, secret.Name)
+	resource, _ := w.cache.Get(id)
+	w.cache.Delete(id)
+
+	if w.handler != nil && resource != nil {
+		w.handler(ResourceEvent{Type: EventDeleted, Resource: resource})
+	}
+}
+
+// Node event handlers
+
+func (w *Watcher) handleNodeAdd(obj interface{}) {
+	node, ok := obj.(*v1.Node)
+	if !ok {
+		return
+	}
+
+	resource := TransformNode(node, w.cache)
+	w.cache.Set(resource)
+	UpdateBidirectionalRelationships(w.cache, resource)
+
+	if w.handler != nil {
+		w.handler(ResourceEvent{Type: EventAdded, Resource: resource})
+	}
+}
+
+func (w *Watcher) handleNodeUpdate(oldObj, newObj interface{}) {
+	node, ok := newObj.(*v1.Node)
+	if !ok {
+		return
+	}
+
+	resource := TransformNode(node, w.cache)
+	w.cache.Set(resource)
+	UpdateBidirectionalRelationships(w.cache, resource)
+
+	if w.handler != nil {
+		w.handler(ResourceEvent{Type: EventModified, Resource: resource})
+	}
+}
+
+func (w *Watcher) handleNodeDelete(obj interface{}) {
+	node, ok := obj.(*v1.Node)
+	if !ok {
+		return
+	}
+
+	id := types.BuildID("Node", "", node.Name)
 	resource, _ := w.cache.Get(id)
 	w.cache.Delete(id)
 

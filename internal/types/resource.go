@@ -12,8 +12,10 @@ const (
 	RelUsedBy    RelationshipType = "UsedBy"
 	RelExposes   RelationshipType = "Exposes"
 	RelExposedBy RelationshipType = "ExposedBy"
-	RelRoutesTo  RelationshipType = "RoutesTo"
-	RelRoutedBy  RelationshipType = "RoutedBy"
+	RelRoutesTo    RelationshipType = "RoutesTo"
+	RelRoutedBy    RelationshipType = "RoutedBy"
+	RelScheduledOn RelationshipType = "ScheduledOn" // Pod scheduled on Node
+	RelSchedules   RelationshipType = "Schedules"   // Node schedules Pods
 )
 
 // GetReverseRelationshipType returns the reverse of a relationship type
@@ -23,10 +25,12 @@ func GetReverseRelationshipType(relType RelationshipType) RelationshipType {
 		RelOwns:      RelOwnedBy,
 		RelDependsOn: RelUsedBy,
 		RelUsedBy:    RelDependsOn,
-		RelExposes:   RelExposedBy,
-		RelExposedBy: RelExposes,
-		RelRoutesTo:  RelRoutedBy,
-		RelRoutedBy:  RelRoutesTo,
+		RelExposes:     RelExposedBy,
+		RelExposedBy:   RelExposes,
+		RelRoutesTo:    RelRoutedBy,
+		RelRoutedBy:    RelRoutesTo,
+		RelScheduledOn: RelSchedules,
+		RelSchedules:   RelScheduledOn,
 	}
 	return pairs[relType]
 }
@@ -71,6 +75,10 @@ type Relationships struct {
 	ExposedBy []ResourceRef `json:"exposedBy"` // e.g., Pod exposed by Service
 	RoutesTo  []ResourceRef `json:"routesTo"`  // e.g., Ingress routes to Service
 	RoutedBy  []ResourceRef `json:"routedBy"`  // e.g., Service routed by Ingress
+
+	// Scheduling relationships
+	ScheduledOn []ResourceRef `json:"scheduledOn"` // e.g., Pod scheduled on Node
+	Schedules   []ResourceRef `json:"schedules"`   // e.g., Node schedules Pods
 }
 
 // ResourceRef is a lightweight reference to another resource
@@ -136,6 +144,10 @@ func (r *Resource) GetRelationship(relType RelationshipType) []ResourceRef {
 		return r.Relationships.RoutesTo
 	case RelRoutedBy:
 		return r.Relationships.RoutedBy
+	case RelScheduledOn:
+		return r.Relationships.ScheduledOn
+	case RelSchedules:
+		return r.Relationships.Schedules
 	default:
 		return nil
 	}

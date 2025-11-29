@@ -283,3 +283,13 @@ func containsRef(refs []types.ResourceRef, ref types.ResourceRef) bool {
 	}
 	return false
 }
+
+// ExtractPodNodeScheduling extracts the Node a Pod is scheduled on
+func ExtractPodNodeScheduling(pod *v1.Pod) []types.ResourceRef {
+	if pod.Spec.NodeName == "" {
+		return []types.ResourceRef{} // Pod not yet scheduled
+	}
+	return []types.ResourceRef{
+		types.NewResourceRef("Node", "", pod.Spec.NodeName), // Nodes are cluster-scoped
+	}
+}

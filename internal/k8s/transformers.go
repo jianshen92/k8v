@@ -2,6 +2,7 @@ package k8s
 
 import (
 	"fmt"
+	"strings"
 
 	appsv1 "k8s.io/api/apps/v1"
 	v1 "k8s.io/api/core/v1"
@@ -30,9 +31,10 @@ func TransformPod(pod *v1.Pod, cache *ResourceCache) *types.Resource {
 		Health: computePodHealth(pod),
 
 		Relationships: types.Relationships{
-			OwnedBy:   ExtractOwners(pod),
-			DependsOn: append(ExtractConfigMapDeps(pod), ExtractSecretDeps(pod)...),
-			ExposedBy: FindReverseRelationships(podID, types.RelExposes, cache),
+			OwnedBy:     ExtractOwners(pod),
+			DependsOn:   append(ExtractConfigMapDeps(pod), ExtractSecretDeps(pod)...),
+			ExposedBy:   FindReverseRelationships(podID, types.RelExposes, cache),
+			ScheduledOn: ExtractPodNodeScheduling(pod),
 		},
 
 		Labels:      pod.Labels,
@@ -367,4 +369,136 @@ func marshalToYAML(obj interface{}) string {
 		return ""
 	}
 	return string(data)
+}
+
+// TransformNode converts a Kubernetes Node to our Resource model
+func TransformNode(node *v1.Node, cache *ResourceCache) *types.Resource {
+	nodeID := types.BuildID("Node", "", node.Name) // Nodes are cluster-scoped (no namespace)
+
+	resource := &types.Resource{
+		ID:        nodeID,
+		Type:      "Node",
+		Name:      node.Name,
+		Namespace: "", // Nodes are cluster-scoped
+
+		Status: types.ResourceStatus{
+			Phase:   getNodePhase(node),
+			Ready:   getNodeReadyStatus(node),
+			Message: getNodeMessage(node),
+		},
+
+		Health: computeNodeHealth(node),
+
+		Relationships: types.Relationships{
+			Schedules: FindReverseRelationships(nodeID, types.RelScheduledOn, cache),
+		},
+
+		Labels:      node.Labels,
+		Annotations: node.Annotations,
+		CreatedAt:   node.CreationTimestamp.Time,
+		Spec:        extractNodeSpec(node),
+		YAML:        marshalToYAML(node),
+	}
+
+	return resource
+}
+
+// getNodePhase returns the node status phase
+func getNodePhase(node *v1.Node) string {
+	if node.Spec.Unschedulable {
+		return "Unschedulable"
+	}
+	for _, condition := range node.Status.Conditions {
+		if condition.Type == v1.NodeReady {
+			if condition.Status == v1.ConditionTrue {
+				return "Ready"
+			}
+			return "NotReady"
+		}
+	}
+	return "Unknown"
+}
+
+// getNodeReadyStatus returns a human-readable ready status
+func getNodeReadyStatus(node *v1.Node) string {
+	for _, condition := range node.Status.Conditions {
+		if condition.Type == v1.NodeReady {
+			return string(condition.Status)
+		}
+	}
+	return "Unknown"
+}
+
+// getNodeMessage returns condition messages for non-ready states
+func getNodeMessage(node *v1.Node) string {
+	var messages []string
+
+	for _, condition := range node.Status.Conditions {
+		if condition.Type == v1.NodeReady && condition.Status != v1.ConditionTrue {
+			messages = append(messages, condition.Message)
+		}
+		// Check for pressure conditions
+		if (condition.Type == v1.NodeMemoryPressure ||
+			condition.Type == v1.NodeDiskPressure ||
+			condition.Type == v1.NodePIDPressure) && condition.Status == v1.ConditionTrue {
+			messages = append(messages, string(condition.Type))
+		}
+	}
+
+	if len(messages) > 0 {
+		return strings.Join(messages, "; ")
+	}
+	return ""
+}
+
+// computeNodeHealth determines health state based on conditions
+func computeNodeHealth(node *v1.Node) types.HealthState {
+	if node.Spec.Unschedulable {
+		return types.HealthWarning
+	}
+
+	ready := false
+	hasPressure := false
+
+	for _, condition := range node.Status.Conditions {
+		if condition.Type == v1.NodeReady {
+			ready = (condition.Status == v1.ConditionTrue)
+		}
+		if (condition.Type == v1.NodeMemoryPressure ||
+			condition.Type == v1.NodeDiskPressure ||
+			condition.Type == v1.NodePIDPressure) && condition.Status == v1.ConditionTrue {
+			hasPressure = true
+		}
+	}
+
+	if !ready {
+		return types.HealthError
+	}
+	if hasPressure {
+		return types.HealthWarning
+	}
+	return types.HealthHealthy
+}
+
+// extractNodeSpec extracts relevant node spec information for display
+func extractNodeSpec(node *v1.Node) map[string]interface{} {
+	return map[string]interface{}{
+		"capacity": map[string]string{
+			"cpu":    node.Status.Capacity.Cpu().String(),
+			"memory": node.Status.Capacity.Memory().String(),
+			"pods":   node.Status.Capacity.Pods().String(),
+		},
+		"allocatable": map[string]string{
+			"cpu":    node.Status.Allocatable.Cpu().String(),
+			"memory": node.Status.Allocatable.Memory().String(),
+			"pods":   node.Status.Allocatable.Pods().String(),
+		},
+		"nodeInfo": map[string]string{
+			"osImage":          node.Status.NodeInfo.OSImage,
+			"kernelVersion":    node.Status.NodeInfo.KernelVersion,
+			"kubeletVersion":   node.Status.NodeInfo.KubeletVersion,
+			"containerRuntime": node.Status.NodeInfo.ContainerRuntimeVersion,
+		},
+		"unschedulable": node.Spec.Unschedulable,
+	}
 }

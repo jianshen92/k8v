@@ -1,4 +1,4 @@
-export const RESOURCE_TYPES = ['Pod', 'Deployment', 'ReplicaSet', 'Service', 'Ingress', 'ConfigMap', 'Secret'];
+export const RESOURCE_TYPES = ['Pod', 'Deployment', 'ReplicaSet', 'Service', 'Ingress', 'ConfigMap', 'Secret', 'Node'];
 
 export const LOCAL_STORAGE_KEYS = {
   namespace: 'k8v-namespace',
@@ -15,6 +15,8 @@ export const RELATIONSHIP_TYPES = [
   { key: 'exposedBy', label: 'Exposed By' },
   { key: 'routesTo', label: 'Routes To' },
   { key: 'routedBy', label: 'Routed By' },
+  { key: 'scheduledOn', label: 'Scheduled On' },
+  { key: 'schedules', label: 'Schedules' },
 ];
 
 export const API_PATHS = {
