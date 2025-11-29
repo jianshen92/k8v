@@ -652,9 +652,12 @@ class App {
         this.currentContainerCount = containers.length;
         this.currentSingleContainerValue = '';
         containerSelector.style.display = 'flex';
-        document.getElementById('logs-content').textContent = 'Please select a container to view logs.';
-        document.getElementById('logs-loading').style.display = 'none';
-        document.getElementById('logs-error').style.display = 'none';
+        // Auto-select the first container to save user a click
+        if (this.containerDropdown) this.containerDropdown.setValue(containers[0].name);
+        // Auto-load logs if currently on logs tab
+        if (this.state.ui.activeDetailTab === 'logs') {
+          this.loadLogs();
+        }
       } else {
         logsTabButton.style.display = 'none';
         this.currentContainerCount = 0;
