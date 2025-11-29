@@ -6,6 +6,66 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Phase 3 Continued] - 2025-11-30
+
+### 🐛 Bug Fixes - Context Switching State Synchronization
+
+Fixed three critical bugs related to context switching that violated the data-centric reactive paradigm.
+
+### Fixed
+- **Bug 1: Context dropdown reverts on page refresh**
+  - Root cause: Frontend used kubeconfig's "current" field instead of backend's `App.context`
+  - Solution: Added `fetchCurrentContext()` method that queries `/api/context/current` on page init
+  - Backend's `App.context` is now the single source of truth
+  - Context dropdown correctly shows running context even after page refresh
+
+- **Bug 2: Resource counts don't update after context switch**
+  - Root cause: `fetchAndDisplayStats()` called immediately after switch, before cache synced
+  - Solution: Moved data fetching to `handleSyncStatus()` reactive handler
+  - Stats now update when `SYNC_STATUS synced=true` event arrives
+  - Guaranteed fresh data from new context's synced cache
+
+- **Bug 3: Namespaces don't repopulate after context switch**
+  - Root cause: `fetchNamespaces()` called before new watcher's cache synced
+  - Solution: Moved namespace fetching to `handleSyncStatus()` reactive handler
+  - Namespace dropdown now populates with new context's namespaces when ready
+  - Eliminates stale/incomplete namespace lists
+
+### Added
+- **Automatic namespace reset on context switch**
+  - Namespace filter automatically resets to "all" when switching contexts
+  - Prevents confusion from stale namespace selections
+  - Gives full view of new cluster immediately
+  - Persisted to localStorage for consistency
+
+### Changed
+- **Reactive event-driven data updates**
+  - `switchContext()` no longer calls `fetchNamespaces()` and `fetchAndDisplayStats()` prematurely
+  - Data fetching now triggered by `SYNC_STATUS synced=true` WebSocket event
+  - Backend signals when ready, frontend reacts (pure reactive paradigm)
+  - Eliminates race conditions and timing-based bugs
+
+- **Context initialization flow**
+  - `init()` now calls `await this.fetchCurrentContext()` before `fetchAndDisplayContexts()`
+  - `fetchAndDisplayContexts()` only sets dropdown options, not value
+  - Clear separation: kubeconfig provides list, backend owns state
+
+### Architecture
+- **Maintained data-centric reactive paradigm**
+  - Single source of truth: `App.context` (backend)
+  - Event-driven updates: SYNC_STATUS events trigger data refresh
+  - No polling, no guessing when data is ready
+  - Trust backend's state machine lifecycle
+  - Clean separation: Backend owns K8s state, frontend owns UI
+
+### Impact
+- **Minimal changes**: 1 file (`app.js`), ~30 lines modified
+- **No backend changes**: All endpoints already existed
+- **Improved UX**: Consistent state across page refreshes
+- **Eliminated race conditions**: Data always fresh when displayed
+
+---
+
 ## [Phase 3 Continued] - 2025-11-28
 
 ### 🚀 Performance Optimization - Lazy Loading by Resource Type

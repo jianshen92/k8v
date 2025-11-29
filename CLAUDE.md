@@ -716,7 +716,177 @@ const wsUrl = `/ws${params.length > 0 ? '?' + params.join('&') : ''}`;
 
 ---
 
-## 6.7. Frontend Architecture (Modular Data-Centric Design)
+## 6.7. Phase 3 Continued (Context Switching Fixes - 2025-11-30)
+
+### What Was Fixed
+
+Three critical state synchronization bugs that violated the data-centric reactive paradigm were identified and fixed.
+
+✅ **Bug Fixes**
+
+1. **Context dropdown reverts on page refresh**
+   - **Root cause**: Frontend queried `/api/contexts` which returns kubeconfig's "current" field, not the actual running backend context (`App.context`)
+   - **Solution**: Added `fetchCurrentContext()` method that queries `/api/context/current` on page init
+   - **Impact**: Context dropdown now correctly shows the running context even after page refresh
+   - **Architecture**: Backend's `App.context` is now the single source of truth
+
+2. **Resource counts don't update after context switch**
+   - **Root cause**: `fetchAndDisplayStats()` called immediately after switch, before new watcher's cache synced
+   - **Solution**: Moved data fetching to `handleSyncStatus()` reactive handler
+   - **Impact**: Stats update when `SYNC_STATUS synced=true` event arrives, guaranteeing fresh data
+   - **Architecture**: Eliminates race condition by trusting backend's state machine
+
+3. **Namespaces don't repopulate after context switch**
+   - **Root cause**: `fetchNamespaces()` called before new watcher's cache synced
+   - **Solution**: Moved namespace fetching to `handleSyncStatus()` reactive handler
+   - **Impact**: Namespace dropdown populates with new context's namespaces when ready
+   - **Architecture**: Event-driven updates replace imperative timing
+
+✅ **Enhancement Added**
+
+- **Automatic namespace reset on context switch**
+  - Namespace filter automatically resets to "all" when switching contexts
+  - Prevents confusion from stale namespace selections that don't exist in new cluster
+  - Gives full view of new cluster immediately
+  - Persisted to localStorage for consistency
+
+### Technical Implementation
+
+**Files Modified**: 1 file only (`internal/server/static/app.js`), ~30 lines changed
+
+**Key Changes**:
+
+1. **Added `fetchCurrentContext()` method**:
+```javascript
+async fetchCurrentContext() {
+  const response = await fetch('/api/context/current');
+  const data = await response.json();
+  if (this.contextDropdown) {
+    this.contextDropdown.setValue(data.context);
+  }
+}
+```
+
+2. **Modified `init()` to query backend state first**:
+```javascript
+async init() {
+  // ... setup ...
+  await this.fetchCurrentContext();  // NEW: Get actual backend context
+  this.fetchAndDisplayContexts();    // Then get available options
+  // ... rest of init ...
+}
+```
+
+3. **Modified `fetchAndDisplayContexts()` to only set options**:
+```javascript
+// REMOVED: Don't set value from kubeconfig's "current" field
+// this.contextDropdown.setValue(currentContext);
+```
+
+4. **Modified `handleSyncStatus()` for reactive data fetching**:
+```javascript
+handleSyncStatus(syncEvent) {
+  // ... update state ...
+  this.updateSyncUI();
+
+  // NEW: Reactive data fetching when synced
+  if (syncEvent.synced && !syncEvent.syncing) {
+    this.fetchNamespaces();
+    this.fetchAndDisplayStats();
+  }
+}
+```
+
+5. **Modified `switchContext()` to remove premature fetches**:
+```javascript
+async switchContext(newContext) {
+  // ... POST to backend ...
+  resetForNewConnection(this.state);
+
+  // Update UI
+  this.contextDropdown.setValue(newContext);
+
+  // NEW: Reset namespace to "all"
+  this.state.filters.namespace = 'all';
+  localStorage.setItem(LOCAL_STORAGE_KEYS.namespace, 'all');
+  this.namespaceDropdown.setValue('all');
+
+  // REMOVED: Premature data fetching
+  // this.fetchNamespaces();
+  // await this.fetchAndDisplayStats();
+
+  // Reconnect (SYNC_STATUS will trigger data refresh when ready)
+  this.wsManager.connect();
+}
+```
+
+### New Data Flow
+
+**Page Load Sequence**:
+```
+init()
+  ↓
+fetchCurrentContext() → GET /api/context/current → Set dropdown value
+  ↓
+fetchAndDisplayContexts() → GET /api/contexts → Set dropdown options
+  ↓
+fetchNamespaces() → GET /api/namespaces
+  ↓
+fetchAndDisplayStats() → GET /api/stats
+  ↓
+wsManager.connect() → WebSocket with snapshot
+```
+
+**Context Switch Sequence**:
+```
+switchContext(newContext)
+  ↓
+POST /api/context/switch
+  ↓
+resetForNewConnection() + renderResourceList()
+  ↓
+Set context dropdown = newContext
+Set namespace dropdown = "all"
+  ↓
+wsManager.connect()
+  ↓
+[Backend: Stop old → Start new → WaitForCacheSync in background]
+  ↓
+SYNC_STATUS syncing=true → Show loading overlay
+  ↓
+[WaitForCacheSync completes]
+  ↓
+SYNC_STATUS synced=true
+  ↓
+handleSyncStatus() → fetchNamespaces() + fetchAndDisplayStats()
+  ↓
+Fresh data displayed
+```
+
+### Reactive Paradigm Maintained
+
+This solution exemplifies the data-centric reactive architecture:
+
+1. **Single Source of Truth**: `App.context` (backend) is authoritative, not kubeconfig
+2. **Event-Driven Updates**: Backend broadcasts `SYNC_STATUS` events, frontend reacts
+3. **No Polling**: Frontend doesn't guess when data is ready
+4. **Trust Backend's State Machine**: Backend signals readiness, frontend responds
+5. **Clean Separation**: Backend owns K8s state, frontend owns UI rendering
+6. **Pull vs Push Balance**:
+   - Push: Sync status, resource events (timing-critical, state changes)
+   - Pull: Stats, namespaces (computed on-demand, efficient)
+
+### Impact
+
+- **Minimal changes**: 1 file, ~30 lines modified
+- **No backend changes**: All endpoints (`/api/context/current`, `/api/stats`, `/api/namespaces`) already existed
+- **Improved UX**: Consistent state across page refreshes and context switches
+- **Eliminated race conditions**: Data always fresh when displayed
+- **Architectural correctness**: Pure reactive paradigm without imperative timing
+
+---
+
+## 6.8. Frontend Architecture (Modular Data-Centric Design)
 
 ### What Was Refactored
 
@@ -1229,4 +1399,4 @@ When making changes, update the relevant sections:
 
 ---
 
-**Last Updated:** 2025-11-29 - Added comprehensive server logging system (`logs/k8v.log`) for debugging. Implemented HTTP request logging middleware with WebSocket support (Hijacker interface). Frontend refactored into modular ES6 architecture. Added fullscreen mode for detail panel.
+**Last Updated:** 2025-11-30 - Fixed three critical context switching bugs: (1) Context dropdown revert on page refresh, (2) Resource counts not updating after switch, (3) Namespaces not repopulating. Implemented reactive event-driven data updates using `SYNC_STATUS synced=true` events. Added automatic namespace reset to "all" on context switch. Maintained data-centric reactive paradigm with single source of truth (`App.context`).
