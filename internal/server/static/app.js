@@ -29,6 +29,11 @@ class App {
     this.setupContextDropdown();
     this.setupNamespaceDropdown();
     this.setupSearchFilter();
+
+    // Get actual backend context first
+    await this.fetchCurrentContext();
+
+    // Then fetch available contexts (for dropdown options)
     this.fetchAndDisplayContexts();
     this.fetchNamespaces();
 
@@ -50,6 +55,13 @@ class App {
 
     // Update UI
     this.updateSyncUI();
+
+    // Reactive data fetching when synced
+    if (syncEvent.synced && !syncEvent.syncing) {
+      console.log('[App] Cache synced, refreshing stats and namespaces');
+      this.fetchNamespaces();
+      this.fetchAndDisplayStats();
+    }
   }
 
   updateSyncUI() {
@@ -758,27 +770,40 @@ class App {
     });
   }
 
+  async fetchCurrentContext() {
+    try {
+      const response = await fetch('/api/context/current');
+      const data = await response.json();
+      const currentContext = data.context;
+
+      console.log('[App] Current backend context:', currentContext);
+
+      // Set dropdown to match backend state
+      if (this.contextDropdown) {
+        this.contextDropdown.setValue(currentContext);
+      }
+    } catch (err) {
+      console.error('[App] Failed to fetch current context:', err);
+    }
+  }
+
   async fetchAndDisplayContexts() {
     try {
       const response = await fetch('/api/contexts');
       const data = await response.json();
       const contexts = data.contexts || [];
 
-      // Find current context
-      const currentCtx = contexts.find(c => c.current);
-      const currentContext = currentCtx ? currentCtx.name : '';
+      console.log('[App] Available contexts:', contexts);
 
-      console.log('[App] Available contexts:', contexts, 'Current:', currentContext);
-
-      // Update dropdown
+      // Update dropdown options
       if (this.contextDropdown) {
         const options = contexts.map(ctx => ({
           value: ctx.name,
-          label: ctx.name + (ctx.current ? ' (current)' : '')
+          label: ctx.name
         }));
 
         this.contextDropdown.setOptions(options);
-        this.contextDropdown.setValue(currentContext);
+        // REMOVED: Don't set value here - fetchCurrentContext() handles it
       }
     } catch (err) {
       console.error('[App] Failed to fetch contexts:', err);
@@ -811,11 +836,14 @@ class App {
         this.contextDropdown.setValue(newContext);
       }
 
-      // Refresh namespaces and stats for new context
-      this.fetchNamespaces();
-      await this.fetchAndDisplayStats();
+      // Reset namespace filter to "all" for new context
+      this.state.filters.namespace = 'all';
+      localStorage.setItem(LOCAL_STORAGE_KEYS.namespace, 'all');
+      if (this.namespaceDropdown) {
+        this.namespaceDropdown.setValue('all');
+      }
 
-      // Reconnect WebSocket (sync status will be pushed automatically)
+      // Reconnect WebSocket (sync status will trigger data refresh when ready)
       this.wsManager.connect();
 
     } catch (err) {
