@@ -19,6 +19,7 @@ var upgrader = websocket.Upgrader{
 type Client struct {
 	conn         *websocket.Conn
 	send         chan k8s.ResourceEvent
+	sendSync     chan k8s.SyncStatusEvent
 	hub          *Hub
 	namespace    string // namespace filter ("" = all namespaces)
 	resourceType string // resource type filter ("" = all types)
@@ -27,22 +28,27 @@ type Client struct {
 
 // Hub manages all active WebSocket connections
 type Hub struct {
-	clients    map[*Client]bool
-	broadcast  chan k8s.ResourceEvent
-	register   chan *Client
-	unregister chan *Client
-	mu         sync.RWMutex
-	logger     *Logger
+	clients           map[*Client]bool
+	broadcast         chan k8s.ResourceEvent
+	broadcastSync     chan k8s.SyncStatusEvent
+	register          chan *Client
+	unregister        chan *Client
+	mu                sync.RWMutex
+	logger            *Logger
+	currentSyncStatus *k8s.SyncStatusEvent
+	syncMu            sync.RWMutex
 }
 
 // NewHub creates a new Hub
 func NewHub(logger *Logger) *Hub {
 	return &Hub{
-		clients:    make(map[*Client]bool),
-		broadcast:  make(chan k8s.ResourceEvent, 256),
-		register:   make(chan *Client),
-		unregister: make(chan *Client),
-		logger:     logger,
+		clients:           make(map[*Client]bool),
+		broadcast:         make(chan k8s.ResourceEvent, 256),
+		broadcastSync:     make(chan k8s.SyncStatusEvent, 10),
+		register:          make(chan *Client),
+		unregister:        make(chan *Client),
+		logger:            logger,
+		currentSyncStatus: nil,
 	}
 }
 
@@ -56,11 +62,23 @@ func (h *Hub) Run() {
 			h.mu.Unlock()
 			h.logger.Printf("[WebSocket] Client connected (total: %d)", len(h.clients))
 
+			// Send cached sync status to new client immediately
+			h.syncMu.RLock()
+			if h.currentSyncStatus != nil {
+				select {
+				case client.sendSync <- *h.currentSyncStatus:
+				default:
+					h.logger.Printf("[WebSocket] Failed to send sync status to new client")
+				}
+			}
+			h.syncMu.RUnlock()
+
 		case client := <-h.unregister:
 			h.mu.Lock()
 			if _, ok := h.clients[client]; ok {
 				delete(h.clients, client)
 				close(client.send)
+				close(client.sendSync)
 			}
 			h.mu.Unlock()
 			h.logger.Printf("[WebSocket] Client disconnected (total: %d)", len(h.clients))
@@ -87,6 +105,27 @@ func (h *Hub) Run() {
 				}
 			}
 			h.mu.RUnlock()
+
+		case syncEvent := <-h.broadcastSync:
+			// Cache the latest sync status
+			h.syncMu.Lock()
+			h.currentSyncStatus = &syncEvent
+			h.syncMu.Unlock()
+
+			// Broadcast to all clients
+			h.mu.RLock()
+			for client := range h.clients {
+				select {
+				case client.sendSync <- syncEvent:
+				default:
+					// Client is slow, close it
+					h.logger.Printf("[WebSocket] Client slow during sync broadcast, closing")
+					close(client.send)
+					close(client.sendSync)
+					delete(h.clients, client)
+				}
+			}
+			h.mu.RUnlock()
 		}
 	}
 }
@@ -94,6 +133,11 @@ func (h *Hub) Run() {
 // Broadcast sends an event to all connected clients
 func (h *Hub) Broadcast(event k8s.ResourceEvent) {
 	h.broadcast <- event
+}
+
+// BroadcastSyncStatus sends sync status update to all clients
+func (h *Hub) BroadcastSyncStatus(event k8s.SyncStatusEvent) {
+	h.broadcastSync <- event
 }
 
 // DisconnectAll forcefully disconnects all clients
@@ -134,6 +178,7 @@ func (s *Server) handleWebSocket(w http.ResponseWriter, r *http.Request) {
 	client := &Client{
 		conn:         conn,
 		send:         make(chan k8s.ResourceEvent, 10000), // Large buffer for initial snapshot
+		sendSync:     make(chan k8s.SyncStatusEvent, 10),
 		hub:          s.hub,
 		namespace:    namespace,
 		resourceType: resourceType,
@@ -196,15 +241,35 @@ func (c *Client) readPump() {
 func (c *Client) writePump() {
 	defer c.conn.Close()
 
-	for event := range c.send {
-		err := c.conn.WriteJSON(event)
-		if err != nil {
-			// Don't log error if connection is closed, it's expected
-			if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+	for {
+		select {
+		case event, ok := <-c.send:
+			if !ok {
 				return
 			}
-			c.logger.Printf("[WebSocket] Write error: %v", err)
-			return
+			err := c.conn.WriteJSON(event)
+			if err != nil {
+				// Don't log error if connection is closed, it's expected
+				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+					return
+				}
+				c.logger.Printf("[WebSocket] Write error: %v", err)
+				return
+			}
+
+		case syncEvent, ok := <-c.sendSync:
+			if !ok {
+				return
+			}
+			err := c.conn.WriteJSON(syncEvent)
+			if err != nil {
+				// Don't log error if connection is closed, it's expected
+				if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway) {
+					return
+				}
+				c.logger.Printf("[WebSocket] Write sync error: %v", err)
+				return
+			}
 		}
 	}
 }

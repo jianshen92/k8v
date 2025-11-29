@@ -22,6 +22,14 @@ export function createResourceSocket(state, handlers) {
     socket.onmessage = (event) => {
       if (myConnectionId !== state.ws.connectionId) return;
       const msg = JSON.parse(event.data);
+
+      // Handle sync status separately
+      if (msg.type === 'SYNC_STATUS') {
+        handlers.onSyncStatus?.(msg);
+        return;
+      }
+
+      // Existing resource event handling
       if (!state.snapshotComplete && msg.type === 'ADDED') {
         state.snapshotCount++;
         clearTimeout(window.snapshotTimer);

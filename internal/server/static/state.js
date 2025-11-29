@@ -31,6 +31,12 @@ export function createInitialState() {
       socket: null,
       currentKey: null,
     },
+    sync: {
+      syncing: false,
+      synced: false,
+      error: null,
+      context: '',
+    },
   };
 }
 
@@ -40,4 +46,9 @@ export function resetForNewConnection(state) {
   state.snapshotComplete = false;
   state.snapshotCount = 0;
   state.ui.unreadEvents = 0;
+
+  // Reset sync state
+  state.sync.syncing = true;
+  state.sync.synced = false;
+  state.sync.error = null;
 }

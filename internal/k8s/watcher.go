@@ -18,15 +18,25 @@ import (
 type EventType string
 
 const (
-	EventAdded    EventType = "ADDED"
-	EventModified EventType = "MODIFIED"
-	EventDeleted  EventType = "DELETED"
+	EventAdded      EventType = "ADDED"
+	EventModified   EventType = "MODIFIED"
+	EventDeleted    EventType = "DELETED"
+	EventSyncStatus EventType = "SYNC_STATUS"
 )
 
 // ResourceEvent represents a resource change event
 type ResourceEvent struct {
 	Type     EventType       `json:"type"`
 	Resource *types.Resource `json:"resource"`
+}
+
+// SyncStatusEvent represents sync status update
+type SyncStatusEvent struct {
+	Type    EventType `json:"type"`
+	Syncing bool      `json:"syncing"`
+	Synced  bool      `json:"synced"`
+	Error   string    `json:"error,omitempty"`
+	Context string    `json:"context"`
 }
 
 // EventHandler is a callback function for resource events

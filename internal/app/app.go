@@ -13,6 +13,14 @@ type Logger interface {
 	Printf(format string, v ...interface{})
 }
 
+// SyncStatus represents the current sync state
+type SyncStatus struct {
+	Syncing bool   `json:"syncing"`
+	Synced  bool   `json:"synced"`
+	Error   string `json:"error,omitempty"`
+	Context string `json:"context"`
+}
+
 // App manages the Kubernetes client, watcher, and server lifecycle
 type App struct {
 	logger  Logger
@@ -20,12 +28,13 @@ type App struct {
 	logHub  *server.LogHub
 	context string
 
-	mu       sync.RWMutex
-	client   *k8s.Client
-	cache    *k8s.ResourceCache
-	watcher  *k8s.Watcher
-	stopCh   chan struct{}
-	isRunning bool
+	mu         sync.RWMutex
+	client     *k8s.Client
+	cache      *k8s.ResourceCache
+	watcher    *k8s.Watcher
+	stopCh     chan struct{}
+	isRunning  bool
+	syncStatus SyncStatus
 }
 
 // NewApp creates a new app instance
@@ -38,11 +47,12 @@ func NewApp(logger Logger, hub *server.Hub, logHub *server.LogHub) *App {
 }
 
 // Start initializes and starts the Kubernetes client and watcher
+// It returns immediately and syncs informers in the background
 func (a *App) Start(context string) error {
 	a.mu.Lock()
-	defer a.mu.Unlock()
 
 	if a.isRunning {
+		a.mu.Unlock()
 		return fmt.Errorf("app is already running")
 	}
 
@@ -51,6 +61,7 @@ func (a *App) Start(context string) error {
 	// Create Kubernetes client
 	client, err := k8s.NewClientWithContext(context)
 	if err != nil {
+		a.mu.Unlock()
 		return fmt.Errorf("failed to create Kubernetes client: %w", err)
 	}
 	client.SetLogger(a.logger)
@@ -64,6 +75,7 @@ func (a *App) Start(context string) error {
 	watcher := k8s.NewWatcher(client, cache, a.hub.Broadcast)
 	err = watcher.Start()
 	if err != nil {
+		a.mu.Unlock()
 		return fmt.Errorf("failed to start watcher: %w", err)
 	}
 	a.logger.Printf("✓ Watcher initialized")
@@ -73,12 +85,6 @@ func (a *App) Start(context string) error {
 	client.Start(stopCh)
 	a.logger.Printf("✓ Informers started")
 
-	// Wait for informer caches to sync (logging is done inside WaitForCacheSync)
-	if !client.WaitForCacheSync(stopCh) {
-		close(stopCh)
-		return fmt.Errorf("failed to sync informer caches")
-	}
-
 	// Update app state
 	a.client = client
 	a.cache = cache
@@ -86,8 +92,66 @@ func (a *App) Start(context string) error {
 	a.stopCh = stopCh
 	a.context = context
 	a.isRunning = true
+	a.syncStatus = SyncStatus{
+		Syncing: true,
+		Synced:  false,
+		Context: context,
+	}
 
-	a.logger.Printf("✓ App started successfully with context: %s", context)
+	a.mu.Unlock()
+
+	// Broadcast syncing state immediately
+	a.hub.BroadcastSyncStatus(k8s.SyncStatusEvent{
+		Type:    k8s.EventSyncStatus,
+		Syncing: true,
+		Synced:  false,
+		Context: context,
+	})
+
+	// Wait for informer caches to sync in background
+	go func() {
+		a.logger.Printf("Starting background sync for informer caches...")
+		synced := client.WaitForCacheSync(stopCh)
+
+		a.mu.Lock()
+		defer a.mu.Unlock()
+
+		if synced {
+			a.syncStatus = SyncStatus{
+				Syncing: false,
+				Synced:  true,
+				Context: context,
+			}
+			a.logger.Printf("✓ App synced successfully with context: %s", context)
+
+			// Broadcast synced state
+			a.hub.BroadcastSyncStatus(k8s.SyncStatusEvent{
+				Type:    k8s.EventSyncStatus,
+				Syncing: false,
+				Synced:  true,
+				Context: context,
+			})
+		} else {
+			a.syncStatus = SyncStatus{
+				Syncing: false,
+				Synced:  false,
+				Error:   "Failed to sync informer caches",
+				Context: context,
+			}
+			a.logger.Printf("✗ App sync failed for context: %s", context)
+
+			// Broadcast error state
+			a.hub.BroadcastSyncStatus(k8s.SyncStatusEvent{
+				Type:    k8s.EventSyncStatus,
+				Syncing: false,
+				Synced:  false,
+				Error:   "Failed to sync informer caches",
+				Context: context,
+			})
+		}
+	}()
+
+	a.logger.Printf("✓ App started with context: %s (syncing in background)", context)
 	return nil
 }
 
@@ -110,17 +174,32 @@ func (a *App) Stop() {
 func (a *App) SwitchContext(newContext string) error {
 	a.logger.Printf("Switching context from '%s' to '%s'...", a.context, newContext)
 
-	// Disconnect all WebSocket clients
-	a.hub.DisconnectAll()
+	// Broadcast syncing state immediately (clients stay connected)
+	a.hub.BroadcastSyncStatus(k8s.SyncStatusEvent{
+		Type:    k8s.EventSyncStatus,
+		Syncing: true,
+		Synced:  false,
+		Context: newContext,
+	})
+
+	// Disconnect all log clients (log connections are specific to pods)
 	a.logHub.DisconnectAll()
-	a.logger.Printf("✓ All clients disconnected")
+	a.logger.Printf("✓ Log clients disconnected")
 
 	// Stop current app
 	a.Stop()
 	a.logger.Printf("✓ Previous context stopped")
 
-	// Start with new context
+	// Start with new context (will broadcast sync updates automatically)
 	if err := a.Start(newContext); err != nil {
+		// Broadcast error state
+		a.hub.BroadcastSyncStatus(k8s.SyncStatusEvent{
+			Type:    k8s.EventSyncStatus,
+			Syncing: false,
+			Synced:  false,
+			Error:   err.Error(),
+			Context: newContext,
+		})
 		return fmt.Errorf("failed to start with new context: %w", err)
 	}
 
@@ -140,4 +219,11 @@ func (a *App) GetCurrentContext() string {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.context
+}
+
+// GetSyncStatus returns the current sync status
+func (a *App) GetSyncStatus() interface{} {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	return a.syncStatus
 }

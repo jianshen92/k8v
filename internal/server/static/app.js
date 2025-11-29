@@ -14,6 +14,7 @@ class App {
       buildUrl: this.buildWsUrl.bind(this),
       onOpen: this.onSocketOpen.bind(this),
       onMessage: this.handleResourceEvent.bind(this),
+      onSyncStatus: this.handleSyncStatus.bind(this),
       onClose: this.onSocketClose.bind(this),
       onError: this.onSocketError.bind(this),
       onSnapshotComplete: this.onSnapshotComplete.bind(this),
@@ -32,8 +33,44 @@ class App {
     this.fetchNamespaces();
 
     await this.fetchAndDisplayStats();
+
     this.wsManager.connect();
     feather.replace();
+  }
+
+  // ---------- Sync Status (WebSocket Push) ----------
+  handleSyncStatus(syncEvent) {
+    console.log('[App] Sync status update:', syncEvent);
+
+    // Update state
+    this.state.sync.syncing = syncEvent.syncing;
+    this.state.sync.synced = syncEvent.synced;
+    this.state.sync.error = syncEvent.error || null;
+    this.state.sync.context = syncEvent.context;
+
+    // Update UI
+    this.updateSyncUI();
+  }
+
+  updateSyncUI() {
+    const loadingState = document.getElementById('loading-state');
+    const resourceList = document.getElementById('resource-list');
+    const loadingText = loadingState?.querySelector('.loading-text');
+    const loadingSubtext = document.getElementById('loading-subtext');
+
+    if (this.state.sync.syncing) {
+      if (loadingState) loadingState.style.display = 'flex';
+      if (resourceList) resourceList.style.display = 'none';
+      if (loadingText) loadingText.textContent = 'Syncing informer caches...';
+      if (loadingSubtext) loadingSubtext.textContent = 'This may take a while for large clusters';
+    } else if (this.state.sync.synced) {
+      if (loadingState) loadingState.style.display = 'none';
+      if (resourceList) resourceList.style.display = 'grid';
+    } else if (this.state.sync.error) {
+      if (loadingState) loadingState.style.display = 'flex';
+      if (loadingText) loadingText.textContent = 'Sync failed';
+      if (loadingSubtext) loadingSubtext.textContent = this.state.sync.error;
+    }
   }
 
   // ---------- WebSocket helpers ----------
@@ -774,14 +811,11 @@ class App {
         this.contextDropdown.setValue(newContext);
       }
 
-      // Wait a bit for server to complete the switch
-      await new Promise(resolve => setTimeout(resolve, 1000));
-
       // Refresh namespaces and stats for new context
       this.fetchNamespaces();
       await this.fetchAndDisplayStats();
 
-      // Reconnect WebSocket
+      // Reconnect WebSocket (sync status will be pushed automatically)
       this.wsManager.connect();
 
     } catch (err) {

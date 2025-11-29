@@ -112,3 +112,11 @@ func (s *Server) handleSwitchContext(w http.ResponseWriter, r *http.Request) {
 		"context": context,
 	})
 }
+
+// handleSyncStatus returns the current sync status
+func (s *Server) handleSyncStatus(w http.ResponseWriter, r *http.Request) {
+	status := s.watcherProvider.GetSyncStatus()
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(status)
+}

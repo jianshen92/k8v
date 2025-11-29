@@ -16,6 +16,7 @@ type WatcherProvider interface {
 	GetWatcher() *k8s.Watcher
 	GetCurrentContext() string
 	SwitchContext(context string) error
+	GetSyncStatus() interface{} // Returns app.SyncStatus or compatible struct
 }
 
 // Server represents the HTTP server
@@ -42,6 +43,15 @@ func (d *directWatcherProvider) GetCurrentContext() string {
 
 func (d *directWatcherProvider) SwitchContext(context string) error {
 	return fmt.Errorf("context switching not supported with direct watcher")
+}
+
+func (d *directWatcherProvider) GetSyncStatus() interface{} {
+	// Direct watcher is always synced
+	return map[string]interface{}{
+		"syncing": false,
+		"synced":  true,
+		"context": "unknown",
+	}
 }
 
 // NewServerWithHub creates a new HTTP server with an existing hub (backward compatibility)
@@ -83,6 +93,7 @@ func (s *Server) Start() error {
 	http.HandleFunc("/api/contexts", s.logger.LoggingMiddleware(s.handleContexts))
 	http.HandleFunc("/api/context/current", s.logger.LoggingMiddleware(s.handleCurrentContext))
 	http.HandleFunc("/api/context/switch", s.logger.LoggingMiddleware(s.handleSwitchContext))
+	http.HandleFunc("/api/sync/status", s.logger.LoggingMiddleware(s.handleSyncStatus))
 	http.HandleFunc("/ws", s.logger.LoggingMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		s.handleWebSocket(w, r)
 	}))
