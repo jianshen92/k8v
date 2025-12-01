@@ -231,7 +231,19 @@ class App {
       return;
     }
 
+    if (event.key === 'd' && !isInputFocused) {
+      event.preventDefault();
+      this.toggleDebugDrawer();
+      return;
+    }
+
     if (event.key === 'Escape') {
+      // Close debug drawer first if open
+      const debugDrawer = document.getElementById('debug-drawer');
+      if (debugDrawer && debugDrawer.classList.contains('visible')) {
+        this.toggleDebugDrawer();
+        return;
+      }
       if (this.namespaceDropdown && this.namespaceDropdown.isOpen()) {
         this.namespaceDropdown.close();
         return;
@@ -454,6 +466,43 @@ class App {
     } else {
       drawer.classList.remove('visible');
     }
+  }
+
+  toggleDebugDrawer() {
+    this.state.ui.debugOpen = !this.state.ui.debugOpen;
+    const drawer = document.getElementById('debug-drawer');
+    if (this.state.ui.debugOpen) {
+      drawer.classList.add('visible');
+      this.renderDebugData();
+    } else {
+      drawer.classList.remove('visible');
+    }
+  }
+
+  renderDebugData() {
+    const debugJson = document.getElementById('debug-json');
+
+    // Convert Map to object for JSON serialization
+    const resourcesArray = Array.from(this.state.resources.values());
+
+    const debugData = {
+      timestamp: new Date().toISOString(),
+      resourceCount: this.state.resources.size,
+      filters: this.state.filters,
+      ui: {
+        activeDetailTab: this.state.ui.activeDetailTab,
+        detailResourceId: this.state.ui.detailResourceId,
+        searchActive: this.state.ui.searchActive,
+        eventsOpen: this.state.ui.eventsOpen,
+      },
+      websocket: {
+        connected: this.state.ws.connected,
+        snapshotComplete: this.state.ws.snapshotComplete,
+      },
+      resources: resourcesArray
+    };
+
+    debugJson.textContent = JSON.stringify(debugData, null, 2);
   }
 
   updateEventsBadge() {
@@ -893,6 +942,7 @@ class App {
 
     document.getElementById('events-toggle').addEventListener('click', () => this.toggleEventsDrawer());
     document.getElementById('events-close').addEventListener('click', () => this.toggleEventsDrawer());
+    document.getElementById('debug-close').addEventListener('click', () => this.toggleDebugDrawer());
     document.getElementById('detail-close').addEventListener('click', () => this.closeDetail());
     document.getElementById('detail-fullscreen').addEventListener('click', () => this.toggleFullscreen());
 

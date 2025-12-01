@@ -15,6 +15,7 @@ export function createInitialState() {
     },
     ui: {
       eventsOpen: false,
+      debugOpen: false,
       unreadEvents: 0,
       searchActive: false,
       activeMainTab: 'dashboard',
