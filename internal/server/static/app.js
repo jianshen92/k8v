@@ -1,4 +1,4 @@
-import { API_PATHS, EVENTS_LIMIT, LOCAL_STORAGE_KEYS, RELATIONSHIP_TYPES, RESOURCE_TYPES } from './config.js';
+import { API_PATHS, EVENTS_LIMIT, LOCAL_STORAGE_KEYS, LOG_MODES, RELATIONSHIP_TYPES, RESOURCE_TYPES } from './config.js';
 import { createInitialState, resetForNewConnection } from './state.js';
 import { createResourceSocket } from './ws.js';
 import './dropdown.js';
@@ -26,6 +26,7 @@ class App {
     this.attachUIListeners();
     this.renderFilters();
     this.renderResourceList();
+    this.renderLogModeButtons();
     this.setupContextDropdown();
     this.setupNamespaceDropdown();
     this.setupSearchFilter();
@@ -235,6 +236,20 @@ class App {
       event.preventDefault();
       this.toggleDebugDrawer();
       return;
+    }
+
+    // Log mode hotkeys - dynamically generated from LOG_MODES data
+    if (!isInputFocused && this.state.ui.activeDetailTab === 'logs' && this.state.ui.detailResourceId) {
+      const resource = this.getResourceById(this.state.ui.detailResourceId);
+      if (resource && resource.type === 'Pod') {
+        // Find mode by hotkey
+        const mode = LOG_MODES.find(m => m.hotkey === event.key);
+        if (mode) {
+          event.preventDefault();
+          this.setLogMode(mode.id);
+          return;
+        }
+      }
     }
 
     if (event.key === 'Escape') {
@@ -578,6 +593,72 @@ class App {
     return this.state.resources.get(id);
   }
 
+  // Get log mode config by id
+  getLogMode(modeId) {
+    return LOG_MODES.find(m => m.id === modeId);
+  }
+
+  // Generate log mode buttons from data
+  renderLogModeButtons() {
+    const container = document.getElementById('logs-mode-buttons');
+    if (!container) return;
+
+    container.innerHTML = '';
+
+    LOG_MODES.forEach(mode => {
+      const btn = document.createElement('button');
+      btn.className = 'logs-mode-btn';
+      btn.dataset.mode = mode.id;
+      btn.title = `Hotkey: ${mode.hotkey}`;
+
+      // Set active if this is the current mode
+      if (mode.id === this.state.log.mode) {
+        btn.classList.add('active');
+      }
+
+      // Mode label
+      const labelSpan = document.createElement('span');
+      labelSpan.className = 'mode-label';
+      labelSpan.textContent = mode.label;
+      btn.appendChild(labelSpan);
+
+      // Hotkey indicator
+      const hotkeySpan = document.createElement('span');
+      hotkeySpan.className = 'mode-hotkey';
+      hotkeySpan.textContent = mode.hotkey;
+      btn.appendChild(hotkeySpan);
+
+      // Click handler
+      btn.addEventListener('click', () => this.setLogMode(mode.id));
+
+      container.appendChild(btn);
+    });
+  }
+
+  setLogMode(modeId) {
+    const mode = this.getLogMode(modeId);
+    if (!mode) {
+      console.error('Invalid log mode:', modeId);
+      return;
+    }
+
+    // Update state
+    this.state.log.mode = modeId;
+
+    // Update UI
+    document.querySelectorAll('.logs-mode-btn').forEach(btn => {
+      btn.classList.toggle('active', btn.dataset.mode === modeId);
+    });
+
+    // Reload logs if logs tab is active and we have a pod selected
+    if (this.state.ui.activeDetailTab === 'logs' && this.state.ui.detailResourceId) {
+      const resource = this.getResourceById(this.state.ui.detailResourceId);
+      if (resource && resource.type === 'Pod') {
+        this.loadLogs();
+      }
+    }
+  }
+
   loadLogs() {
     const resource = this.getResourceById(this.state.ui.detailResourceId);
     if (!resource || resource.type !== 'Pod') return;
@@ -598,7 +679,31 @@ class App {
     document.getElementById('logs-error').style.display = 'none';
 
     const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${wsProtocol}//${window.location.host}${API_PATHS.logsWs}?namespace=${resource.namespace}&pod=${resource.name}&container=${container}`;
+
+    // Get mode options
+    const modeOpts = this.getLogMode(this.state.log.mode) || this.getLogMode('tail');
+
+    // Build WebSocket URL with mode parameters
+    const params = new URLSearchParams({
+      namespace: resource.namespace,
+      pod: resource.name,
+      container: container,
+      follow: modeOpts.follow.toString()
+    });
+
+    if (modeOpts.headLines !== null) {
+      params.append('headLines', modeOpts.headLines.toString());
+    }
+
+    if (modeOpts.tailLines !== null) {
+      params.append('tailLines', modeOpts.tailLines.toString());
+    }
+
+    if (modeOpts.sinceSeconds !== null) {
+      params.append('sinceSeconds', modeOpts.sinceSeconds.toString());
+    }
+
+    const wsUrl = `${wsProtocol}//${window.location.host}${API_PATHS.logsWs}?${params.toString()}`;
 
     this.state.log.socket = new WebSocket(wsUrl);
     this.state.log.currentKey = `${resource.namespace}/${resource.name}/${container}`;
@@ -959,6 +1064,8 @@ class App {
         }
       });
     }
+
+    // Note: Log mode button click handlers are attached in renderLogModeButtons()
   }
 }
 

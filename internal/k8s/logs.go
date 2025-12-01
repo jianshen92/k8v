@@ -17,12 +17,21 @@ type LogMessage struct {
 	Error  string `json:"error,omitempty"`
 }
 
+// LogOptions represents options for streaming pod logs
+type LogOptions struct {
+	TailLines    *int64
+	HeadLines    *int64 // Limit to first N lines (not supported by K8s API, implemented by counting)
+	SinceSeconds *int64
+	Follow       bool
+}
+
 // StreamPodLogs streams logs from a specific pod container to the broadcast channel
 func (c *Client) StreamPodLogs(
 	ctx context.Context,
 	namespace string,
 	podName string,
 	containerName string,
+	opts LogOptions,
 	broadcast chan<- LogMessage,
 ) error {
 	// Validate pod exists first
@@ -44,14 +53,16 @@ func (c *Client) StreamPodLogs(
 	}
 
 	// Configure log options
-	sinceSeconds := int64(600) // Last 10 minutes
-	tailLines := int64(1000)   // Fallback line limit
 	logOptions := &corev1.PodLogOptions{
-		Container:    containerName,
-		Follow:       true,
-		Timestamps:   true,
-		SinceSeconds: &sinceSeconds,
-		TailLines:    &tailLines,
+		Container:  containerName,
+		Follow:     opts.Follow,
+		Timestamps: true,
+	}
+	if opts.TailLines != nil {
+		logOptions.TailLines = opts.TailLines
+	}
+	if opts.SinceSeconds != nil {
+		logOptions.SinceSeconds = opts.SinceSeconds
 	}
 
 	// Open log stream
@@ -64,12 +75,19 @@ func (c *Client) StreamPodLogs(
 
 	// Stream logs line by line
 	scanner := bufio.NewScanner(stream)
+	lineCount := int64(0)
 	for scanner.Scan() {
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case broadcast <- LogMessage{Type: "LOG_LINE", Line: scanner.Text() + "\n"}:
 			// Sent successfully
+			lineCount++
+			// Stop if we've reached the head limit
+			if opts.HeadLines != nil && lineCount >= *opts.HeadLines {
+				broadcast <- LogMessage{Type: "LOG_END", Reason: fmt.Sprintf("Head limit reached (%d lines)", *opts.HeadLines)}
+				return nil
+			}
 		}
 	}
 

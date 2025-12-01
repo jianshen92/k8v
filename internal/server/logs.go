@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"strconv"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -102,6 +103,33 @@ func (s *Server) handleLogsWebSocket(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Parse optional log options
+	var opts k8s.LogOptions
+
+	tailLinesStr := r.URL.Query().Get("tailLines")
+	if tailLinesStr != "" {
+		if val, err := strconv.ParseInt(tailLinesStr, 10, 64); err == nil {
+			opts.TailLines = &val
+		}
+	}
+
+	headLinesStr := r.URL.Query().Get("headLines")
+	if headLinesStr != "" {
+		if val, err := strconv.ParseInt(headLinesStr, 10, 64); err == nil {
+			opts.HeadLines = &val
+		}
+	}
+
+	sinceSecondsStr := r.URL.Query().Get("sinceSeconds")
+	if sinceSecondsStr != "" {
+		if val, err := strconv.ParseInt(sinceSecondsStr, 10, 64); err == nil {
+			opts.SinceSeconds = &val
+		}
+	}
+
+	followStr := r.URL.Query().Get("follow")
+	opts.Follow = followStr != "false" // Default to true
+
 	// Upgrade connection
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
@@ -128,7 +156,7 @@ func (s *Server) handleLogsWebSocket(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	go func() {
-		err := s.watcherProvider.GetWatcher().StreamPodLogs(ctx, namespace, pod, container, s.logHub.broadcast)
+		err := s.watcherProvider.GetWatcher().StreamPodLogs(ctx, namespace, pod, container, opts, s.logHub.broadcast)
 		if err != nil {
 			s.logger.Printf("[LogStream] Streaming error for %s: %v", podKey, err)
 			// Send error message to client

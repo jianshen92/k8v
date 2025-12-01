@@ -31,6 +31,7 @@ export function createInitialState() {
     log: {
       socket: null,
       currentKey: null,
+      mode: 'tail',
     },
     sync: {
       syncing: false,

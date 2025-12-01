@@ -635,6 +635,6 @@ func (w *Watcher) GetResource(id string) (*types.Resource, bool) {
 }
 
 // StreamPodLogs delegates to the client's StreamPodLogs method
-func (w *Watcher) StreamPodLogs(ctx context.Context, namespace, podName, containerName string, broadcast chan<- LogMessage) error {
-	return w.client.StreamPodLogs(ctx, namespace, podName, containerName, broadcast)
+func (w *Watcher) StreamPodLogs(ctx context.Context, namespace, podName, containerName string, opts LogOptions, broadcast chan<- LogMessage) error {
+	return w.client.StreamPodLogs(ctx, namespace, podName, containerName, opts, broadcast)
 }
