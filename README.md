@@ -12,13 +12,15 @@ k8v is a **single-binary CLI tool** that connects to your Kubernetes cluster and
 
 ### Key Features
 
+✅ **Vim-Like Command Mode** - Keyboard-first navigation with `:` command palette and kubectl-style aliases
 ✅ **Real-time Updates** - Live streaming of cluster changes via WebSocket
 ✅ **Resource Visualization** - View Pods, Deployments, Services, Ingress, ReplicaSets, ConfigMaps, Secrets
-✅ **Pod Logs Viewer** - Stream and view container logs in real-time with auto-selected first container
+✅ **Pod Logs Viewer** - Stream and view container logs in real-time with configurable modes (1-6 hotkeys)
 ✅ **Search Functionality** - Quick search by resource name with keyboard shortcut (/)
 ✅ **Multi-Context Support** - Switch between Kubernetes contexts with reactive state management
 ✅ **Namespace Filtering** - Server-side filtering with searchable dropdown and keyboard navigation
 ✅ **Relationship Mapping** - Click any resource to see bidirectional relationships
+✅ **Complete Keyboard Navigation** - `:`, `/`, `d`, `1-6`, `Esc` shortcuts for power users
 ✅ **Scale Tested** - Handles 20,000+ resources smoothly
 ✅ **Zero Dependencies** - Single binary with embedded web UI
 ✅ **Production Ready** - Battle-tested with large production clusters
@@ -79,6 +81,31 @@ The UI automatically discovers and displays relationships:
 **Example:** Click a Service to see:
 - `Exposes: Pod api-1, api-2, api-3` (clickable)
 - `Routed by: Ingress api` (clickable)
+
+### Keyboard Shortcuts
+
+k8v is designed for keyboard-first workflows with comprehensive shortcuts:
+
+- **`:` (Command Mode)** - Vim-style command palette for instant navigation
+  - Type resource names: `pod`, `svc`, `deploy`, etc.
+  - Use kubectl aliases: `po`, `rs`, `cm`, `ing`, etc.
+  - Special commands: `namespace`, `context`
+  - Example: `:svc` → instantly switch to Services view
+- **`/`** - Quick search to filter resources by name
+- **`d`** - Toggle debug drawer (view cache data)
+- **`1-6`** - Switch log viewer modes (when viewing Pod logs)
+  - 1: Head (first 500 lines)
+  - 2: Tail (last 100 + follow)
+  - 3: Last 5 minutes
+  - 4: Last 15 minutes
+  - 5: Last 500 lines
+  - 6: Last 1000 lines
+- **`Esc`** - Hierarchical close (command → debug → detail → search)
+- **`↑↓`** - Navigate dropdowns and autocomplete
+- **`Tab`** - Auto-complete in command mode
+- **`Enter`** - Execute/select
+
+See `HOTKEYS.md` for complete documentation.
 
 ## 🏗️ Architecture
 

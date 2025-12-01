@@ -35,3 +35,37 @@ export const LOG_MODES = [
   { id: 'last-500', label: '-500', hotkey: '5', headLines: null, tailLines: 500, sinceSeconds: null, follow: true },
   { id: 'last-1000', label: '-1000', hotkey: '6', headLines: null, tailLines: 1000, sinceSeconds: null, follow: true },
 ];
+
+export const COMMANDS = [
+  // Resource type commands
+  { id: 'pod', type: 'resource', label: 'Pod', aliases: ['pods', 'po'], target: 'Pod', description: 'Switch to Pods view' },
+  { id: 'deployment', type: 'resource', label: 'Deployment', aliases: ['deployments', 'deploy'], target: 'Deployment', description: 'Switch to Deployments view' },
+  { id: 'replicaset', type: 'resource', label: 'ReplicaSet', aliases: ['replicasets', 'rs'], target: 'ReplicaSet', description: 'Switch to ReplicaSets view' },
+  { id: 'service', type: 'resource', label: 'Service', aliases: ['services', 'svc'], target: 'Service', description: 'Switch to Services view' },
+  { id: 'ingress', type: 'resource', label: 'Ingress', aliases: ['ingresses', 'ing'], target: 'Ingress', description: 'Switch to Ingress view' },
+  { id: 'configmap', type: 'resource', label: 'ConfigMap', aliases: ['configmaps', 'cm'], target: 'ConfigMap', description: 'Switch to ConfigMaps view' },
+  { id: 'secret', type: 'resource', label: 'Secret', aliases: ['secrets'], target: 'Secret', description: 'Switch to Secrets view' },
+  { id: 'node', type: 'resource', label: 'Node', aliases: ['nodes', 'no'], target: 'Node', description: 'Switch to Nodes view' },
+
+  // Special commands
+  { id: 'namespace', type: 'action', label: 'namespace', aliases: ['ns'], action: 'openNamespaceDropdown', description: 'Open namespace selector' },
+  { id: 'context', type: 'action', label: 'context', aliases: ['ctx'], action: 'openContextDropdown', description: 'Open context selector' },
+  { id: 'cluster', type: 'action', label: 'cluster', aliases: [], action: 'openContextDropdown', description: 'Open context selector' },
+];
+
+export function findCommand(input) {
+  const normalized = input.toLowerCase().trim();
+  return COMMANDS.find(cmd =>
+    cmd.label.toLowerCase() === normalized ||
+    cmd.aliases.some(alias => alias === normalized)
+  );
+}
+
+export function getCommandSuggestions(input) {
+  if (!input) return COMMANDS;
+  const normalized = input.toLowerCase().trim();
+  return COMMANDS.filter(cmd =>
+    cmd.label.toLowerCase().startsWith(normalized) ||
+    cmd.aliases.some(alias => alias.startsWith(normalized))
+  );
+}

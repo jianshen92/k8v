@@ -39,6 +39,12 @@ export function createInitialState() {
       error: null,
       context: '',
     },
+    command: {
+      active: false,
+      input: '',
+      highlightedIndex: -1,
+      suggestions: [],
+    },
   };
 }
 

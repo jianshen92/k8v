@@ -229,6 +229,26 @@
     </div>
   </div>
 
+  <!-- Command mode overlay -->
+  <div id="command-mode-overlay" class="command-overlay" style="display: none;">
+    <div class="command-backdrop"></div>
+    <div class="command-container">
+      <div class="command-mode-indicator">COMMAND</div>
+      <div class="command-input-wrapper">
+        <span class="command-prompt">:</span>
+        <input
+          type="text"
+          id="command-input"
+          class="command-input"
+          placeholder="Type command (pod, service, namespace, etc.)"
+          autocomplete="off"
+          spellcheck="false"
+        />
+      </div>
+      <div id="command-suggestions" class="command-suggestions"></div>
+    </div>
+  </div>
+
   <script type="module" src="./app.js"></script>
 </body>
 </html>

@@ -237,3 +237,179 @@ code { color: #81c784; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .loading-text { font-size: 18px; font-weight: 600; color: #fff; }
 .loading-subtext { font-size: 14px; color: #888; }
+
+/* Command mode overlay */
+.command-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.command-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+
+.command-container {
+  position: relative;
+  width: 600px;
+  max-width: 90vw;
+  background: rgba(20, 20, 30, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(196, 245, 97, 0.3);
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5), 0 0 0 3px rgba(196, 245, 97, 0.1);
+  overflow: hidden;
+  animation: commandFadeIn 0.2s ease-out;
+}
+
+@keyframes commandFadeIn {
+  from {
+    opacity: 0;
+    transform: scale(0.95) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.command-mode-indicator {
+  background: #C4F561;
+  color: #000;
+  padding: 8px 16px;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-align: center;
+}
+
+.command-input-wrapper {
+  display: flex;
+  align-items: center;
+  padding: 20px;
+  gap: 12px;
+}
+
+.command-prompt {
+  font-family: 'Space Grotesk', monospace;
+  font-size: 24px;
+  font-weight: 700;
+  color: #C4F561;
+  flex-shrink: 0;
+}
+
+.command-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  color: #fff;
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 18px;
+  font-weight: 500;
+  outline: none;
+  padding: 0;
+}
+
+.command-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+.command-suggestions {
+  max-height: 300px;
+  overflow-y: auto;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.command-suggestions::-webkit-scrollbar {
+  width: 6px;
+}
+
+.command-suggestions::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.command-suggestions::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
+}
+
+.command-suggestion {
+  padding: 12px 20px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-left: 3px solid transparent;
+}
+
+.command-suggestion:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.command-suggestion.highlighted {
+  background: rgba(196, 245, 97, 0.15);
+  border-left-color: #C4F561;
+}
+
+.command-suggestion-main {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.command-suggestion-label {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.command-suggestion-aliases {
+  font-size: 12px;
+  color: #666;
+  font-family: 'Space Grotesk', monospace;
+}
+
+.command-suggestion-description {
+  font-size: 12px;
+  color: #888;
+  margin-left: auto;
+  padding-left: 16px;
+  text-align: right;
+}
+
+.command-suggestion-type {
+  display: inline-block;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.command-suggestion-type.resource {
+  background: rgba(33, 150, 243, 0.2);
+  color: #03A9F4;
+}
+
+.command-suggestion-type.action {
+  background: rgba(156, 39, 176, 0.2);
+  color: #E91E63;
+}

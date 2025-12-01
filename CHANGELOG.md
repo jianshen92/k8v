@@ -6,6 +6,212 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Phase 3 Continued] - 2025-12-02
+
+### ⌨️ Vim-Like Command Mode - Keyboard-First Navigation
+
+Major milestone: Complete keyboard-driven navigation system inspired by vim, enabling power users to navigate the entire dashboard without touching the mouse.
+
+### Added
+- **Command Mode (`:`)**: Vim-style command palette for instant navigation
+  - Press `:` to activate command mode (full-screen modal with glassmorphic backdrop)
+  - Real-time autocomplete with arrow key navigation
+  - Tab completion for faster typing
+  - Enter to execute commands
+  - Escape to close command mode
+  - "COMMAND" mode indicator (like vim's visual mode indicator)
+
+- **Resource Type Commands**: Navigate to any resource type instantly
+  - `pod`, `deployment`, `replicaset`, `service`, `ingress`, `configmap`, `secret`, `node`
+  - Kubectl-style aliases: `po`, `svc`, `rs`, `deploy`, `cm`, `ing`, `no`
+  - Typing resource name + Enter switches to that resource view
+  - Example: `:svc` → instantly switch to Services view
+
+- **Special Action Commands**: Trigger UI actions via keyboard
+  - `namespace` / `ns` - Opens namespace dropdown for selection
+  - `context` / `ctx` - Opens context dropdown for cluster switching
+  - `cluster` - Opens context dropdown (alias)
+  - 100ms delay for smooth transitions when opening dropdowns
+
+- **Smart Autocomplete System**:
+  - Real-time filtering as you type
+  - Visual type badges (blue for resource types, pink for actions)
+  - Shows all aliases (e.g., "pods, po" for Pod command)
+  - Descriptive text for each command
+  - "No matching commands" message when no results
+  - Prefix matching (e.g., "dep" matches "deployment")
+
+- **Comprehensive Documentation**: `HOTKEYS.md` file
+  - All global shortcuts documented (`:`, `/`, `d`, `Esc`)
+  - All command mode commands with aliases
+  - Log viewer hotkeys (1-6)
+  - Escape key hierarchy explanation
+  - Examples and usage tips
+  - Instructions for adding custom commands
+
+### Changed
+- **Keyboard event hierarchy**: Command mode now has highest priority
+  - `:` activates command mode (before all other shortcuts)
+  - `Escape` closes command mode first (hierarchical: command → debug → dropdown → detail → events → search)
+  - Respects input focus state (won't activate when typing in other fields)
+
+- **Modular frontend architecture**: Enhanced separation of concerns
+  - Command definitions in `config.js` (data-centric)
+  - Command state in `state.js` (4 properties: active, input, highlightedIndex, suggestions)
+  - All logic in `app.js` (7 new methods: 238 lines)
+  - HTML structure in `index.html` (18 lines)
+  - Complete styling in `style.css` (175 lines)
+
+### Technical Details
+
+**Data-Centric Command System**:
+```javascript
+// config.js - Pure data configuration
+export const COMMANDS = [
+  // Resource type commands
+  { id: 'pod', type: 'resource', label: 'Pod',
+    aliases: ['pods', 'po'], target: 'Pod',
+    description: 'Switch to Pods view' },
+
+  // Action commands
+  { id: 'namespace', type: 'action', label: 'namespace',
+    aliases: ['ns'], action: 'openNamespaceDropdown',
+    description: 'Open namespace selector' },
+];
+
+// Helper functions
+export function findCommand(input) { /* exact match */ }
+export function getCommandSuggestions(input) { /* prefix filter */ }
+```
+
+**Command Mode Methods** (app.js):
+1. `activateCommandMode()` - Show overlay, focus input, initialize suggestions
+2. `deactivateCommandMode()` - Hide overlay, reset state
+3. `handleCommandInput(event)` - Update suggestions as user types
+4. `renderCommandSuggestions()` - Generate DOM for autocomplete list
+5. `handleCommandKeydown(event)` - Handle keyboard navigation (↑↓, Tab, Enter, Esc)
+6. `executeCommand(cmd)` - Execute resource filter or action command
+7. `scrollCommandSuggestionIntoView()` - Auto-scroll to highlighted suggestion
+8. `setupCommandMode()` - Wire up event listeners
+
+**Command Execution Flow**:
+```javascript
+// Resource command (e.g., :deployment)
+if (cmd.type === 'resource') {
+  this.setFilter(cmd.target); // Switch to Deployment view
+  this.deactivateCommandMode();
+}
+
+// Action command (e.g., :namespace)
+if (cmd.type === 'action') {
+  this.deactivateCommandMode();
+  setTimeout(() => {
+    if (this.namespaceDropdown) {
+      this.namespaceDropdown.open(); // Open dropdown
+    }
+  }, 100);
+}
+```
+
+**Visual Design**:
+- Full-screen overlay (z-index: 3000, highest layer)
+- Glassmorphic container (600px wide, blur effects)
+- Brand color (#C4F561) for active states and borders
+- Smooth fade-in animation (0.2s, scale + translate)
+- Type-specific badges (blue: `rgba(33,150,243,0.2)`, pink: `rgba(156,39,176,0.2)`)
+- Highlighted suggestions with left border accent
+- Responsive layout (90vw max-width for mobile)
+
+**Keyboard Integration**:
+```javascript
+// handleGlobalKeydown() updates
+if (event.key === ':' && !isInputFocused) {
+  event.preventDefault();
+  this.activateCommandMode();
+  return;
+}
+
+// Escape hierarchy
+if (event.key === 'Escape') {
+  if (this.state.command.active) {
+    this.deactivateCommandMode();
+    return;
+  }
+  // ... existing escape logic for debug, dropdown, detail, events, search
+}
+```
+
+### Files Modified (6 total)
+1. `internal/server/static/config.js` (+45 lines) - COMMANDS array, helper functions
+2. `internal/server/static/state.js` (+5 lines) - Command state object
+3. `internal/server/static/index.html` (+18 lines) - Command overlay HTML
+4. `internal/server/static/style.css` (+175 lines) - Complete command mode styling
+5. `internal/server/static/app.js` (+243 lines) - Methods + keyboard integration
+6. `HOTKEYS.md` (NEW FILE) - Complete keyboard shortcut documentation
+
+### Architecture Benefits
+- **Data-centric**: Commands are pure configuration data
+- **Extensible**: Add new command = one line in config array
+- **Zero duplication**: Aliases, hotkeys, descriptions defined once
+- **Self-documenting**: Data structure shows all available commands
+- **Type-safe**: Resource vs action commands have different execution paths
+- **Maintainable**: No hardcoded command lists in logic
+
+### Adding Custom Commands
+
+To add a new command, simply add one entry to the `COMMANDS` array:
+
+```javascript
+// Resource type command
+{
+  id: 'daemonset',
+  type: 'resource',
+  label: 'DaemonSet',
+  aliases: ['daemonsets', 'ds'],
+  target: 'DaemonSet',
+  description: 'Switch to DaemonSets view'
+}
+
+// Action command
+{
+  id: 'help',
+  type: 'action',
+  label: 'help',
+  aliases: ['h'],
+  action: 'openHelpModal',
+  description: 'Show help documentation'
+}
+```
+
+Everything else (autocomplete, rendering, keyboard handling) is auto-generated!
+
+### UX Improvements
+- **Keyboard-first workflow**: Never need to touch mouse for navigation
+- **Muscle memory**: Vim users feel instantly at home with `:` command mode
+- **Kubectl familiarity**: Aliases match kubectl conventions (po, svc, rs)
+- **Visual feedback**: Clear mode indicator, smooth animations, highlighted selections
+- **Discoverable**: Autocomplete shows all available commands
+- **Fast**: Instant response, no network latency
+
+### Impact
+This feature transforms k8v into a true keyboard-driven power tool:
+- ✅ Vim-like navigation (`:` command mode)
+- ✅ Kubectl-style aliases (po, svc, rs, deploy)
+- ✅ Complete keyboard accessibility
+- ✅ Data-centric extensible architecture
+- ✅ Comprehensive documentation (HOTKEYS.md)
+
+**Combined with existing shortcuts**:
+- `/` for search
+- `1-6` for log modes
+- `d` for debug drawer
+- `Esc` for hierarchical close
+- Arrow keys for dropdown navigation
+
+k8v now offers a complete keyboard-first experience comparable to k9s, but with the power of a web UI.
+
+---
+
 ## [Phase 3 Continued] - 2025-12-01
 
 ### 🎨 Pod Log Viewer Enhancements

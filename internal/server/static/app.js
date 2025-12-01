@@ -1,4 +1,4 @@
-import { API_PATHS, EVENTS_LIMIT, LOCAL_STORAGE_KEYS, LOG_MODES, RELATIONSHIP_TYPES, RESOURCE_TYPES } from './config.js';
+import { API_PATHS, COMMANDS, EVENTS_LIMIT, LOCAL_STORAGE_KEYS, LOG_MODES, RELATIONSHIP_TYPES, RESOURCE_TYPES, findCommand, getCommandSuggestions } from './config.js';
 import { createInitialState, resetForNewConnection } from './state.js';
 import { createResourceSocket } from './ws.js';
 import './dropdown.js';
@@ -30,6 +30,7 @@ class App {
     this.setupContextDropdown();
     this.setupNamespaceDropdown();
     this.setupSearchFilter();
+    this.setupCommandMode();
 
     // Get actual backend context first
     await this.fetchCurrentContext();
@@ -218,6 +219,244 @@ class App {
     this.renderResourceList();
   }
 
+  // ---------- Command Mode ----------
+  activateCommandMode() {
+    // Don't activate if input is focused or dropdowns are open
+    const activeElement = document.activeElement;
+    const isInputFocused = activeElement && (
+      activeElement.tagName === 'INPUT' ||
+      activeElement.tagName === 'TEXTAREA' ||
+      activeElement.isContentEditable
+    );
+    if (isInputFocused) return;
+    if (this.namespaceDropdown && this.namespaceDropdown.isOpen()) return;
+    if (this.contextDropdown && this.contextDropdown.isOpen()) return;
+
+    this.state.command.active = true;
+    this.state.command.input = '';
+    this.state.command.highlightedIndex = -1;
+    this.state.command.suggestions = COMMANDS.slice(); // All commands initially
+
+    const overlay = document.getElementById('command-mode-overlay');
+    overlay.style.display = 'flex';
+
+    const input = document.getElementById('command-input');
+    input.value = '';
+    input.focus();
+
+    this.renderCommandSuggestions();
+  }
+
+  deactivateCommandMode() {
+    this.state.command.active = false;
+    this.state.command.input = '';
+    this.state.command.highlightedIndex = -1;
+    this.state.command.suggestions = [];
+
+    const overlay = document.getElementById('command-mode-overlay');
+    overlay.style.display = 'none';
+  }
+
+  handleCommandInput(event) {
+    this.state.command.input = event.target.value;
+    this.state.command.highlightedIndex = -1;
+    this.state.command.suggestions = getCommandSuggestions(this.state.command.input);
+    this.renderCommandSuggestions();
+  }
+
+  renderCommandSuggestions() {
+    const container = document.getElementById('command-suggestions');
+    container.innerHTML = '';
+
+    if (this.state.command.suggestions.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'command-suggestion';
+      empty.style.color = '#666';
+      empty.style.cursor = 'default';
+      empty.textContent = 'No matching commands';
+      container.appendChild(empty);
+      return;
+    }
+
+    this.state.command.suggestions.forEach((cmd, index) => {
+      const item = document.createElement('div');
+      item.className = 'command-suggestion';
+      if (index === this.state.command.highlightedIndex) {
+        item.classList.add('highlighted');
+      }
+      item.dataset.index = index;
+
+      // Main content
+      const main = document.createElement('div');
+      main.className = 'command-suggestion-main';
+
+      // Type badge
+      const typeBadge = document.createElement('span');
+      typeBadge.className = `command-suggestion-type ${cmd.type}`;
+      typeBadge.textContent = cmd.type;
+      main.appendChild(typeBadge);
+
+      // Label
+      const label = document.createElement('span');
+      label.className = 'command-suggestion-label';
+      label.textContent = cmd.label;
+      main.appendChild(label);
+
+      // Aliases (if any)
+      if (cmd.aliases.length > 0) {
+        const aliases = document.createElement('span');
+        aliases.className = 'command-suggestion-aliases';
+        aliases.textContent = `(${cmd.aliases.join(', ')})`;
+        main.appendChild(aliases);
+      }
+
+      item.appendChild(main);
+
+      // Description
+      const desc = document.createElement('div');
+      desc.className = 'command-suggestion-description';
+      desc.textContent = cmd.description;
+      item.appendChild(desc);
+
+      // Click handler
+      item.addEventListener('click', () => this.executeCommand(cmd));
+
+      container.appendChild(item);
+    });
+  }
+
+  executeCommand(cmd) {
+    if (!cmd) return;
+
+    if (cmd.type === 'resource') {
+      // Switch resource type filter
+      this.setFilter(cmd.target);
+      this.deactivateCommandMode();
+    } else if (cmd.type === 'action') {
+      // Execute special action
+      this.deactivateCommandMode();
+      if (cmd.action === 'openNamespaceDropdown') {
+        setTimeout(() => {
+          if (this.namespaceDropdown) {
+            this.namespaceDropdown.open();
+          }
+        }, 100); // Small delay for smooth transition
+      } else if (cmd.action === 'openContextDropdown') {
+        setTimeout(() => {
+          if (this.contextDropdown) {
+            this.contextDropdown.open();
+          }
+        }, 100);
+      }
+    }
+  }
+
+  handleCommandKeydown(event) {
+    if (!this.state.command.active) return;
+
+    const suggestions = this.state.command.suggestions;
+
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      this.deactivateCommandMode();
+      return;
+    }
+
+    if (event.key === 'ArrowDown') {
+      event.preventDefault();
+      if (suggestions.length === 0) return;
+      this.state.command.highlightedIndex = Math.min(
+        this.state.command.highlightedIndex + 1,
+        suggestions.length - 1
+      );
+      this.renderCommandSuggestions();
+      this.scrollCommandSuggestionIntoView();
+      return;
+    }
+
+    if (event.key === 'ArrowUp') {
+      event.preventDefault();
+      if (suggestions.length === 0) return;
+      this.state.command.highlightedIndex = Math.max(
+        this.state.command.highlightedIndex - 1,
+        0
+      );
+      this.renderCommandSuggestions();
+      this.scrollCommandSuggestionIntoView();
+      return;
+    }
+
+    if (event.key === 'Tab') {
+      event.preventDefault();
+      // Auto-complete with highlighted suggestion
+      if (this.state.command.highlightedIndex >= 0 &&
+          this.state.command.highlightedIndex < suggestions.length) {
+        const cmd = suggestions[this.state.command.highlightedIndex];
+        const input = document.getElementById('command-input');
+        input.value = cmd.label;
+        this.state.command.input = cmd.label;
+        this.state.command.suggestions = getCommandSuggestions(cmd.label);
+        this.renderCommandSuggestions();
+      } else if (suggestions.length === 1) {
+        // Auto-complete with only suggestion
+        const cmd = suggestions[0];
+        const input = document.getElementById('command-input');
+        input.value = cmd.label;
+        this.state.command.input = cmd.label;
+      }
+      return;
+    }
+
+    if (event.key === 'Enter') {
+      event.preventDefault();
+
+      // Execute highlighted suggestion
+      if (this.state.command.highlightedIndex >= 0 &&
+          this.state.command.highlightedIndex < suggestions.length) {
+        this.executeCommand(suggestions[this.state.command.highlightedIndex]);
+        return;
+      }
+
+      // Execute first matching command if input exactly matches
+      const exactMatch = findCommand(this.state.command.input);
+      if (exactMatch) {
+        this.executeCommand(exactMatch);
+        return;
+      }
+
+      // Execute first suggestion if only one exists
+      if (suggestions.length === 1) {
+        this.executeCommand(suggestions[0]);
+        return;
+      }
+
+      // If no match, do nothing (could add visual feedback here)
+      return;
+    }
+  }
+
+  scrollCommandSuggestionIntoView() {
+    const container = document.getElementById('command-suggestions');
+    const highlighted = container.querySelector('.command-suggestion.highlighted');
+    if (highlighted) {
+      highlighted.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    }
+  }
+
+  setupCommandMode() {
+    const commandInput = document.getElementById('command-input');
+    const commandBackdrop = document.querySelector('.command-backdrop');
+
+    if (commandInput) {
+      commandInput.addEventListener('input', (e) => this.handleCommandInput(e));
+      commandInput.addEventListener('keydown', (e) => this.handleCommandKeydown(e));
+    }
+
+    if (commandBackdrop) {
+      commandBackdrop.addEventListener('click', () => this.deactivateCommandMode());
+    }
+  }
+
   handleGlobalKeydown(event) {
     const activeElement = document.activeElement;
     const isInputFocused = activeElement && (
@@ -225,6 +464,13 @@ class App {
       activeElement.tagName === 'TEXTAREA' ||
       activeElement.isContentEditable
     );
+
+    // Command mode activation - highest priority
+    if (event.key === ':' && !isInputFocused) {
+      event.preventDefault();
+      this.activateCommandMode();
+      return;
+    }
 
     if (event.key === '/' && !isInputFocused) {
       event.preventDefault();
@@ -253,6 +499,12 @@ class App {
     }
 
     if (event.key === 'Escape') {
+      // Command mode - highest priority
+      if (this.state.command.active) {
+        this.deactivateCommandMode();
+        return;
+      }
+
       // Close debug drawer first if open
       const debugDrawer = document.getElementById('debug-drawer');
       if (debugDrawer && debugDrawer.classList.contains('visible')) {
