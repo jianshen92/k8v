@@ -87,7 +87,8 @@ func (h *Hub) Run() {
 			h.mu.RLock()
 			for client := range h.clients {
 				// Skip if client has namespace filter and resource doesn't match
-				if client.namespace != "" && event.Resource.Namespace != client.namespace {
+				// But always include cluster-scoped resources (empty namespace)
+				if client.namespace != "" && event.Resource.Namespace != "" && event.Resource.Namespace != client.namespace {
 					continue
 				}
 

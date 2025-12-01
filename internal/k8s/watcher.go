@@ -539,12 +539,20 @@ func (w *Watcher) GetNamespaces() []string {
 }
 
 // GetSnapshotFiltered returns resources filtered by namespace
+// Cluster-scoped resources (empty namespace) are always included
 func (w *Watcher) GetSnapshotFiltered(namespace string) []ResourceEvent {
+	allResources := w.cache.List()
 	var resources []*types.Resource
-	if namespace == "" {
-		resources = w.cache.List()
+
+	if namespace == "" || namespace == "all" {
+		resources = allResources
 	} else {
-		resources = w.cache.ListByNamespace(namespace)
+		// Filter by namespace, but always include cluster-scoped resources (empty namespace)
+		for _, r := range allResources {
+			if r.Namespace == "" || r.Namespace == namespace {
+				resources = append(resources, r)
+			}
+		}
 	}
 
 	events := make([]ResourceEvent, len(resources))
@@ -584,12 +592,20 @@ func (w *Watcher) GetResourceCounts(namespace string) map[string]int {
 }
 
 // GetSnapshotFilteredByType returns resources filtered by namespace and type
+// Cluster-scoped resources (empty namespace) are always included
 func (w *Watcher) GetSnapshotFilteredByType(namespace string, resourceType string) []ResourceEvent {
+	allResources := w.cache.List()
 	var resources []*types.Resource
+
 	if namespace == "" || namespace == "all" {
-		resources = w.cache.List()
+		resources = allResources
 	} else {
-		resources = w.cache.ListByNamespace(namespace)
+		// Filter by namespace, but always include cluster-scoped resources (empty namespace)
+		for _, r := range allResources {
+			if r.Namespace == "" || r.Namespace == namespace {
+				resources = append(resources, r)
+			}
+		}
 	}
 
 	// Filter by resource type
