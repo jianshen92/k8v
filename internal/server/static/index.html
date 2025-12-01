@@ -50,16 +50,16 @@
           <div class="stat-card"><div class="stat-label">Nodes</div><div class="stat-value" id="stat-node">0</div></div>
         </div>
 
-        <!-- Context Filter -->
-        <div class="resource-filter">
-          <div class="filter-label">Cluster Context</div>
-          <k8v-dropdown id="context-dropdown" placeholder="Loading..."></k8v-dropdown>
-        </div>
-
-        <!-- Namespace Filter -->
-        <div class="resource-filter">
-          <div class="filter-label">Namespace</div>
-          <k8v-dropdown id="namespace-dropdown" placeholder="All Namespaces"></k8v-dropdown>
+        <!-- Context & Namespace Filters (side by side) -->
+        <div class="resource-filter dropdowns-row">
+          <div class="dropdown-column">
+            <div class="filter-label">Cluster Context</div>
+            <k8v-dropdown id="context-dropdown" placeholder="Loading..."></k8v-dropdown>
+          </div>
+          <div class="dropdown-column">
+            <div class="filter-label">Namespace</div>
+            <k8v-dropdown id="namespace-dropdown" placeholder="All Namespaces"></k8v-dropdown>
+          </div>
         </div>
 
         <!-- Search Filter (Vim-style activation) -->

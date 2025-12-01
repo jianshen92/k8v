@@ -36,6 +36,10 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Robo
 /* Filters */
 .resource-filter { grid-column: 1 / -1; }
 .filter-label { grid-column: 1 / -1; font-family: 'Space Grotesk', sans-serif; font-size: 11px; color: #888; text-transform: uppercase; letter-spacing: 1.2px; font-weight: 600; margin-bottom: 4px; }
+
+/* Horizontal dropdowns layout */
+.dropdowns-row { display: flex; gap: 16px; align-items: flex-start; }
+.dropdown-column { flex: 1; min-width: 0; }
 .filter-buttons { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
 .filter-btn { background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08); color: #888; padding: 10px 16px; border-radius: 12px; font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; transition: all 0.25s; min-width: 110px; }
 .filter-btn:hover:not(.active) { background: rgba(255,255,255,0.08); color: #fff; transform: translateY(-1px); }
