@@ -154,7 +154,7 @@ k8v-dropdown { position: relative; margin-top: 8px; display: block; }
 .tab.active { border-bottom-color: #C4F561; color: #C4F561; }
 .panel-content { padding: 20px; flex: 1; overflow: hidden; display: flex; flex-direction: column; }
 .tab-content { display: none; }
-.tab-content.active { display: flex; flex-direction: column; flex: 1; }
+.tab-content.active { display: flex; flex-direction: column; flex: 1; overflow-y: auto; }
 .tab-content.logs-tab.active { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
 .section { margin-bottom: 24px; }
 .section h3 { font-size: 16px; margin-bottom: 12px; color: #C4F561; font-family: 'Space Grotesk', sans-serif; text-transform: uppercase; letter-spacing: 1px; }
@@ -178,28 +178,33 @@ code { color: #81c784; }
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 10px 16px;
   background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 6px;
-  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  color: #888;
   font-family: 'Space Grotesk', sans-serif;
   font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.25s;
+  min-width: 110px;
 }
-.logs-mode-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: rgba(255, 255, 255, 0.9);
+.logs-mode-btn:hover:not(.active) {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  transform: translateY(-1px);
 }
 .logs-mode-btn.active {
-  background: rgba(196, 245, 97, 0.15);
-  border-color: rgba(196, 245, 97, 0.4);
-  color: #C4F561;
+  background: #C4F561;
+  border-color: #C4F561;
+  color: #000;
+  box-shadow: 0 8px 20px rgba(196, 245, 97, 0.3);
 }
 .logs-mode-btn .mode-label {
-  font-weight: 500;
+  font-weight: 600;
 }
 .logs-mode-btn .mode-hotkey {
   display: inline-flex;
@@ -215,8 +220,8 @@ code { color: #81c784; }
   color: rgba(255, 255, 255, 0.5);
 }
 .logs-mode-btn.active .mode-hotkey {
-  background: rgba(196, 245, 97, 0.2);
-  color: #C4F561;
+  background: rgba(0, 0, 0, 0.2);
+  color: #000;
 }
 
 /* Empty state */
