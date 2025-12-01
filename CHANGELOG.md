@@ -6,6 +6,118 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Phase 3 Continued] - 2025-12-01
+
+### 🎨 Pod Log Viewer Enhancements
+
+Major improvements to pod log viewing with configurable modes and data-driven architecture.
+
+### Added
+- **Log viewing modes**: Six configurable modes for different log viewing needs
+  - **Head** (Hotkey 1): Show first 500 lines from beginning
+  - **Tail** (Hotkey 2): Show last 100 lines then follow (default)
+  - **Last 5m** (Hotkey 3): Show logs from last 5 minutes with follow
+  - **Last 15m** (Hotkey 4): Show logs from last 15 minutes with follow
+  - **Last 500** (Hotkey 5): Show last 500 lines with follow
+  - **Last 1000** (Hotkey 6): Show last 1000 lines with follow
+- **Keyboard shortcuts**: Hotkeys 1-6 to quickly switch between modes (only active when logs tab is open)
+- **Mode selector UI**: Visual buttons showing current mode with hotkey indicators
+- **HeadLines support**: Backend counting mechanism to show first N lines (K8s API doesn't support this natively)
+- **Data-driven architecture**: Log modes auto-generated from configuration data
+
+### Changed
+- **Configuration structure**: LOG_MODES migrated from object to array with metadata
+  - Added `id`, `label`, `hotkey` fields to each mode
+  - Moved from `app.js` to `config.js` (separation of data and logic)
+- **Dynamic UI generation**: Mode buttons now generated from data instead of hardcoded HTML
+  - Buttons created dynamically during initialization
+  - Hotkey handlers generated from data
+  - Click handlers attached inline during creation
+- **Improved labels**: Shortened mode labels for compact display (-5m, -15m, -500, -1000)
+
+### Fixed
+- **Head mode bug**: Now correctly shows first 500 lines instead of last 500
+  - Added `HeadLines` field to `LogOptions` struct
+  - Implemented line counting in stream handler
+  - Stops streaming after reaching head limit
+
+### Technical Details
+
+**Backend Changes**:
+- `internal/k8s/logs.go`:
+  - Added `HeadLines *int64` field to `LogOptions`
+  - Added line counting logic in `StreamPodLogs()`
+  - Stops and sends `LOG_END` when head limit reached
+- `internal/server/logs.go`:
+  - Parse `headLines` query parameter
+  - Pass to streaming handler
+
+**Frontend Changes**:
+- `internal/server/static/config.js`:
+  - Converted `LOG_MODES` from object to array with metadata
+  - Each mode now has: `id`, `label`, `hotkey`, `headLines`, `tailLines`, `sinceSeconds`, `follow`
+- `internal/server/static/app.js`:
+  - Added `getLogMode(modeId)` helper to find mode by id
+  - Added `renderLogModeButtons()` to generate buttons from data
+  - Updated `setLogMode()` to use helper
+  - Updated `loadLogs()` to use helper and add `headLines` parameter
+  - Updated `handleGlobalKeydown()` to dynamically find mode by hotkey
+  - Removed hardcoded hotkey map
+- `internal/server/static/index.html`:
+  - Removed all hardcoded button elements
+  - Added empty container for dynamic generation
+
+**Key Code Pattern**:
+```javascript
+// Data-driven button generation
+export const LOG_MODES = [
+  { id: 'head', label: 'Head', hotkey: '1', headLines: 500, ... },
+  // ... add more modes here
+];
+
+renderLogModeButtons() {
+  LOG_MODES.forEach(mode => {
+    const btn = createButton(mode);
+    btn.addEventListener('click', () => this.setLogMode(mode.id));
+    container.appendChild(btn);
+  });
+}
+
+// Dynamic hotkey handling
+const mode = LOG_MODES.find(m => m.hotkey === event.key);
+if (mode) this.setLogMode(mode.id);
+```
+
+```go
+// Head mode implementation (first N lines)
+lineCount := int64(0)
+for scanner.Scan() {
+  broadcast <- LogMessage{Type: "LOG_LINE", Line: scanner.Text() + "\n"}
+  lineCount++
+  if opts.HeadLines != nil && lineCount >= *opts.HeadLines {
+    broadcast <- LogMessage{Type: "LOG_END", Reason: fmt.Sprintf("Head limit reached (%d lines)", *opts.HeadLines)}
+    return nil
+  }
+}
+```
+
+### Architecture Benefits
+- **Single source of truth**: All mode configuration in one place (`config.js`)
+- **Zero duplication**: Hotkeys defined once, used for buttons and handlers
+- **Easy to extend**: Adding new mode = one line in config
+- **Self-documenting**: Data structure shows all available modes
+- **Maintainable**: No need to sync HTML/JS/CSS when adding modes
+- **Pure data-centric**: Data drives UI and behavior
+
+### Adding New Modes
+To add a new log viewing mode, simply add one line to `config.js`:
+```javascript
+{ id: 'last-1h', label: '-1h', hotkey: '7', tailLines: null, sinceSeconds: 3600, follow: true }
+```
+Everything else (button, hotkey, handler) is auto-generated!
+
+---
+
 ## [Phase 3 Continued] - 2025-11-30
 
 ### 🎉 New Features - Pod Logs, Search, and Context Switching
@@ -454,161 +566,27 @@ function setNamespace(ns) {
 ---
 
 ## [Phase 2] - 2025-11-27
-
-### ✅ Phase 2 Complete - Production-Ready Application
-
-This phase focused on UI refinement, performance optimization, and stability improvements for production use.
-
-### Added
-- **Incremental DOM updates**: Only affected resources are updated in the UI (no more full list rerenders)
-  - `ADDED` events insert pills in correct sorted position
-  - `MODIFIED` events replace only the changed pill
-  - `DELETED` events remove only the deleted pill
-- **Progress logging**: Shows transmission progress every 1000 resources during snapshot
-- **Alphabetical sorting**: Resources now sorted by name (A-Z) instead of grouped by type
-- **Compact statistics cards**: Reduced from 220px to 140px minwidth for better space utilization
-
-### Changed
-- **Removed "ALL" filter tab**: Users now view specific resource types only
-- **Default view**: Now starts with "Pods" view instead of "All"
-- **Resource pill styling**: Fixed height issues with `min-height: 56px` and `align-items: flex-start`
-- **Statistics design**: Smaller, more compact cards with reduced padding and font sizes
-
-### Fixed
-- **WebSocket race condition**: Snapshot now sent synchronously before starting read/write pumps
-  - Eliminates "send on closed channel" panics
-  - Direct `WriteJSON` calls bypass buffered channel
-  - Proper cleanup if client disconnects during snapshot
-- **UI flickering**: Incremental updates prevent visual artifacts and preserve scroll position
-- **Filter awareness**: Incremental updates respect current filter state
-
-### Performance
-- Successfully tested with **21,867 resources** in production cluster
-- Snapshot transmission: ~2-5 seconds (with progress logging)
-- Update latency: < 100ms for incremental updates
-- Memory usage: Stable, no leaks observed
-- No WebSocket panics or crashes
-
-### Technical Details
-
-**Files Modified**:
-- `internal/server/static/index.html`: Incremental DOM updates, filter changes, sorting
-- `internal/server/websocket.go`: Synchronous snapshot, race condition fix, progress logging
-
-**Key Code Changes**:
-```javascript
-// Incremental DOM updates
-function updateResourceInList(resourceId, eventType) {
-  // Only update single resource element, not entire list
-}
-```
-
-```go
-// Synchronous snapshot transmission
-snapshot := s.watcher.GetSnapshot()
-for i, event := range snapshot {
-  err := conn.WriteJSON(event) // Direct write, no race condition
-  if err != nil {
-    return // Clean exit on error
-  }
-}
-// Start pumps AFTER snapshot complete
-go client.writePump()
-go client.readPump()
-```
+### Production-Ready Application
+UI refinement and performance optimization for large clusters (tested with 21k+ resources).
+- Incremental DOM updates (no flickering, preserved scroll)
+- WebSocket race condition fix (synchronous snapshot)
+- Alphabetical sorting, compact statistics
+- Removed "ALL" filter, default to Pods view
 
 ---
 
 ## [Phase 1] - 2025-11-26
-
-### ✅ Phase 1 Complete - Production Backend + Minimal Frontend
-
-This phase established the core backend architecture and basic frontend integration.
-
-### Added
-- **Go project structure**: Production-ready directory layout
-  - `cmd/k8v/main.go`: CLI entry point
-  - `internal/types/`: Shared type definitions
-  - `internal/k8s/`: Kubernetes client, watcher, transformers
-  - `internal/server/`: HTTP/WebSocket server
-- **Kubernetes integration**:
-  - Kubeconfig loading (local and in-cluster)
-  - SharedInformerFactory pattern for efficiency
-  - Watchers for 7 resource types: Pod, Deployment, ReplicaSet, Service, Ingress, ConfigMap, Secret
-- **Generic relationship system**:
-  - 8 relationship types (OwnedBy, Owns, DependsOn, UsedBy, Exposes, ExposedBy, RoutesTo, RoutedBy)
-  - Bidirectional relationship computation
-  - Type-safe RelationshipType enum
-  - Single `FindReverseRelationships()` function replaces 4 specific functions
-- **WebSocket streaming**:
-  - Hub pattern for managing multiple clients
-  - Initial snapshot + incremental updates
-  - Panic recovery for large clusters
-  - 10,000 event channel buffer
-- **Resource transformers**:
-  - `TransformPod()`, `TransformDeployment()`, `TransformReplicaSet()`
-  - `TransformService()`, `TransformIngress()`, `TransformConfigMap()`, `TransformSecret()`
-  - Health computation from K8s status
-  - YAML serialization
-- **Minimal frontend**:
-  - Table view with all resource types
-  - Detail panel with Overview and YAML tabs
-  - Clickable bidirectional relationship navigation
-  - Real-time updates via WebSocket
-  - Health indicators (green/yellow/red)
-  - Console logging for development
-
-### Technical Details
-- **Binary size**: 62MB
-- **Dependencies**: client-go v0.31.0, gorilla/websocket, sigs.k8s.io/yaml
-- **Go version**: 1.23+
-- **Architecture**: Single binary with embedded web assets
+### Core Backend Architecture
+Production Go backend with full data model and minimal frontend.
+- Kubernetes integration with SharedInformerFactory
+- Generic relationship system (8 types, bidirectional)
+- WebSocket streaming (Hub pattern, initial snapshot + updates)
+- 7 resource types, transformers, health computation
+- 62MB single binary with embedded web assets
 
 ---
 
-## [POC] - 2025-11-25
-
-### ✅ POC Validation Complete
-
-Minimal proof-of-concept to validate the technical approach.
-
-### Added
-- Basic K8s watch API integration
-- WebSocket streaming to browser
-- Simple table UI with Pods, Deployments, ReplicaSets
-- ADD/MODIFY/DELETE event handling
-
-### Validated
-- ✅ K8s watch API works correctly
-- ✅ WebSocket streaming to browser works
-- ✅ Real-time UI updates work (< 1 second latency)
-- ✅ Simple table UI successfully displays resources
-
-### Learnings
-- Direct Watch API (not Informers) is simple and works for POC
-- gorilla/websocket handles concurrent writes (need mutex)
-- Browser WebSocket API is straightforward
-- k8s.io/client-go requires Go 1.23 (use v0.31.0)
-
----
-
-## [Prototype] - 2025-11-24
-
-### Initial Prototype
-
-Complete HTML/CSS/JS prototype demonstrating the vision.
-
-### Features
-- Dark-themed glassmorphic UI
-- Dashboard view with statistics cards
-- Filterable resource lists (All, Pods, Deployments, Services, Ingress, ReplicaSets, ConfigMaps, Secrets)
-- Detail panel with Overview, YAML, and Relationships tabs
-- Topology view placeholder (Mermaid.js)
-- Events timeline
-- Mock data for 3 namespaces
-
-### Limitations
-- No Kubernetes API connection (mock data only)
-- No real-time updates
-- No backend server
-- No CLI tool wrapper
+## [Earlier Phases] - 2025-11-24/25
+### POC & Prototype
+- **Prototype**: HTML/CSS/JS mockup with glassmorphic UI, mock data
+- **POC**: Validated K8s Watch API + WebSocket streaming (<1s latency)

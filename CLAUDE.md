@@ -24,9 +24,10 @@ K8v is a Kubernetes cluster visualization tool designed to be like k9s but with 
   - Bidirectional relationship navigation
   - **Namespace filtering**: Server-side filtering with searchable dropdown UI
   - **Resource type lazy loading**: Instant stats + filtered WebSocket snapshots
-  - **Pod logs viewer**: Real-time log streaming with auto-select first container
+  - **Pod logs viewer**: Real-time log streaming with 6 configurable modes (Head, Tail, Last 5m/15m/500/1000) and keyboard shortcuts (1-6)
   - **Search functionality**: Quick search by name with keyboard shortcut (/)
   - **Multi-context support**: Switch between clusters without restarting
+  - **Data-driven UI**: Log modes auto-generated from configuration data
   - **Performance optimized**: 40-100x network reduction for large clusters
   - Single 62MB binary (k8v) ready to use
   - Tested with large production clusters (21,000+ resources)
@@ -404,768 +405,19 @@ Deployment "api-deploy"
 
 ---
 
-## 6. Phase 2 Complete (Production-Ready Application)
-
-### What Was Built in Phase 2
-
-✅ **UI Refinements and Optimizations**
-- Removed "ALL" filter tab - users now view specific resource types
-- Default view set to "Pods" for immediate usefulness
-- Compact statistics cards (reduced from 220px to 140px minwidth)
-- Alphabetical sorting by resource name (not grouped by type)
-- Fixed resource pill height issues for long names
-
-✅ **Performance Optimizations**
-- **Incremental DOM updates**: Only affected resources are updated, not full list rerenders
-  - ADDED events: Insert new pill in correct sorted position
-  - MODIFIED events: Replace only the changed pill in place
-  - DELETED events: Remove only the deleted pill
-  - No more flickering or scroll position loss
-- **Filter-aware updates**: Respects current filter, only shows/hides matching resources
-- **Initial snapshot optimization**: Full render during snapshot, incremental after
-
-✅ **WebSocket Stability for Large Clusters**
-- **Fixed race condition**: Snapshot now sent synchronously before starting read/write pumps
-- **Direct WriteJSON**: Snapshot bypasses buffered channel to avoid "send on closed channel" panics
-- **Progress logging**: Shows progress every 1000 resources during snapshot transmission
-- **Graceful error handling**: Proper cleanup if client disconnects during snapshot
-- **Tested at scale**: Successfully handles 21,867 resources in production cluster
-
-✅ **UI Polish**
-- Consistent pill heights with `min-height: 56px`
-- Proper alignment with `align-items: flex-start`
-- Smaller, more compact statistics section
-- Better visual hierarchy focusing on resource list
-
-### Technical Implementation Details
-
-**Incremental Updates (`internal/server/static/index.html`)**
-```javascript
-// Before: Full rerender on every event (slow, flickering)
-function handleResourceEvent(event) {
-  updateStatCards();
-  renderResourceList(); // ← Cleared and rebuilt entire list
-}
-
-// After: Targeted DOM updates (fast, smooth)
-function handleResourceEvent(event) {
-  updateStatCards();
-  if (snapshotComplete) {
-    updateResourceInList(resourceId, event.type); // ← Only update one resource
-  } else {
-    renderResourceList(); // During snapshot, use full render
-  }
-}
-```
-
-**WebSocket Race Condition Fix (`internal/server/websocket.go`)**
-```go
-// Before: Async snapshot with race condition
-go func() {
-  for _, event := range snapshot {
-    client.send <- event // Could panic if channel closed
-  }
-}()
-go client.writePump()
-go client.readPump()
-
-// After: Synchronous snapshot, no race
-snapshot := s.watcher.GetSnapshot()
-for i, event := range snapshot {
-  err := conn.WriteJSON(event) // Direct write, no channel
-  if err != nil {
-    conn.Close()
-    return
-  }
-  // Progress logging every 1000 resources
-}
-// Now start pumps after snapshot complete
-go client.writePump()
-go client.readPump()
-```
-
-### Performance Characteristics
-
-**Large Cluster Performance (21,867 resources)**:
-- Snapshot transmission: ~2-5 seconds (with progress logging)
-- Memory usage: Stable, no leaks observed
-- Update latency: < 100ms for incremental updates
-- No flickering or visual artifacts
-- No WebSocket panics or crashes
-
-**UI Rendering Performance**:
-- Initial render: Full list render during snapshot (expected)
-- Live updates: Single DOM element add/update/remove (optimized)
-- Filter changes: Full list render (expected, infrequent)
-- Scroll position: Preserved during updates
-
-### Current Binary Specs
-
-- **Size:** 62MB
-- **Platform:** macOS (tested), Linux/Windows (should work)
-- **Dependencies:** None (embedded web UI)
-- **Command:** `./k8v` or `./k8v -port 8080`
-
-### Known Limitations
-
-1. ~~**Frontend lag with large clusters**~~ - ✅ **PARTIALLY FIXED** Lazy loading by resource type reduces load significantly (virtualization still future work)
-2. ~~**No namespace filtering**~~ - ✅ **COMPLETED** Server-side namespace filtering with searchable dropdown
-3. ~~**No pod logs viewing**~~ - ✅ **COMPLETED** Real-time log streaming with container selection and auto-select
-4. ~~**No search functionality**~~ - ✅ **COMPLETED** Search by name with keyboard shortcut (/)
-5. ~~**No multi-cluster support**~~ - ✅ **COMPLETED** Context switching with reactive state management
-6. **Basic YAML view** - No syntax highlighting or clickable references (Future)
-7. **Limited resource types** - Only 7 core types (StatefulSets, DaemonSets, etc. in Future)
-8. **Topology view not implemented** - Placeholder shown (Future)
-9. **Limited search scope** - Cannot search by labels or annotations yet (Future)
-
----
-
-## 6.5. Phase 3 Progress (Namespace Filtering & UI Polish)
-
-### What Was Built in Phase 3
-
-✅ **Server-Side Namespace Filtering**
-- **Backend filtering at WebSocket level**: Resources filtered before transmission
-- **Filter broadcasts**: Hub only sends events matching client's namespace
-- **Query parameter support**: WebSocket accepts `?namespace=xxx` parameter
-- **New API endpoint**: `/api/namespaces` lists available namespaces
-- **200x performance improvement**: 20k resources → 100 resources for typical namespace
-
-✅ **Advanced Namespace Selector UI**
-- **Searchable dropdown**: Type to filter namespaces in real-time
-- **Keyboard navigation**: Arrow keys (↓/↑), Enter to select, Escape to close
-- **Auto-scroll**: Highlighted option automatically scrolls into view
-- **Visual feedback**: Yellow highlight for keyboard focus, distinct from active state
-- **localStorage persistence**: Remembers last selected namespace across sessions
-- **Smart reconnection**: Clears state and reconnects WebSocket when namespace changes
-- **Empty state detection**: Auto-switches to "All Namespaces" if selected namespace is deleted
-
-✅ **Icon Consistency Improvements**
-- **Feather Icons integration**: Replaced all emojis with consistent line-based icons
-- **Events button**: `📋` → `<i data-feather="activity">`
-- **Topology placeholder**: `🚧` → `<i data-feather="git-branch">`
-- **Empty state**: `📭` → `<i data-feather="inbox">`
-- **Detail panel tabs**: Added icons to Overview (info) and YAML (code) tabs
-- **Professional appearance**: Unified visual language matching glassmorphic theme
-
-### Technical Implementation Details
-
-**Backend: Namespace Filtering (`internal/server/websocket.go`)**
-```go
-// Parse namespace from query parameter
-namespace := r.URL.Query().Get("namespace")
-if namespace == "" || namespace == "all" {
-    namespace = "" // Empty string = all namespaces
-}
-
-client := &Client{
-    conn:      conn,
-    send:      make(chan k8s.ResourceEvent, 10000),
-    hub:       s.hub,
-    namespace: namespace,
-}
-
-// Send filtered snapshot
-snapshot := s.watcher.GetSnapshotFiltered(namespace)
-
-// Filter broadcasts per client
-if client.namespace != "" && event.Resource.Namespace != client.namespace {
-    continue // Skip this client
-}
-```
-
-**Frontend: Searchable Dropdown with Keyboard Navigation (`index.html`)**
-```javascript
-function handleNamespaceKeyboard(e) {
-  if (e.key === 'ArrowDown') {
-    highlightedNamespaceIndex = Math.min(highlightedNamespaceIndex + 1, filtered.length - 1);
-    scrollToHighlighted();
-  } else if (e.key === 'Enter') {
-    setNamespace(filtered[highlightedNamespaceIndex]);
-    closeNamespaceDropdown();
-  } else if (e.key === 'Escape') {
-    closeNamespaceDropdown();
-  }
-}
-```
-
-**Icon Consistency: Feather Icons**
-```html
-<!-- Feather Icons CDN -->
-<script src="https://unpkg.com/feather-icons"></script>
-
-<!-- Usage in HTML -->
-<i data-feather="activity"></i>  <!-- Events -->
-<i data-feather="inbox"></i>     <!-- Empty state -->
-<i data-feather="info"></i>      <!-- Overview tab -->
-<i data-feather="code"></i>      <!-- YAML tab -->
-
-<!-- Render icons -->
-<script>feather.replace();</script>
-```
-
-### Performance Characteristics
-
-**Namespace Filtering Impact (21,867 resource cluster)**:
-- Full snapshot: 21,867 resources → 50MB transfer → 3-5s load
-- Filtered (default namespace): 100 resources → 250KB transfer → <1s load
-- **Network reduction**: 200x smaller payload
-- **Memory reduction**: Client holds only filtered resources
-- **Update efficiency**: Only receives events for selected namespace
-
-**Keyboard Navigation**:
-- Instant highlight updates (no lag)
-- Smooth auto-scroll with `scrollIntoView({ block: 'nearest', behavior: 'smooth' })`
-- Works seamlessly with real-time search filtering
-
----
-
-## 6.6. Phase 3 Continued (Performance Optimization - 2025-11-28)
-
-### What Was Built
-
-✅ **Lazy Loading by Resource Type**
-- **REST API for instant stats**: `/api/stats` endpoint returns counts without streaming
-- **Resource type filtering**: WebSocket filters by type before transmission (`?type=Pod`)
-- **Server-side filtering**: `GetSnapshotFilteredByType(namespace, resourceType)` method
-- **Dual filtering**: Combines namespace + type filtering (e.g., `?namespace=yatai&type=Pod`)
-- **40-100x network reduction**: Only send filtered resources (e.g., 171 Deployments vs 3,037 total)
-
-✅ **Bug Fixes**
-- **Stats overwriting**: Removed client-side counting, now always fetch from `/api/stats`
-- **Automatic namespace switching**: Removed unwanted behavior that violated user expectations
-
-### Technical Implementation
-
-**Backend Changes**:
-```go
-// GET /api/stats?namespace=xxx
-func (w *Watcher) GetResourceCounts(namespace string) map[string]int {
-  var resources []*types.Resource
-  if namespace == "" || namespace == "all" {
-    resources = w.cache.List()
-  } else {
-    resources = w.cache.ListByNamespace(namespace)
-  }
-
-  counts := make(map[string]int)
-  for _, r := range resources {
-    counts[r.Type]++
-  }
-  counts["total"] = len(resources)
-  return counts
-}
-
-// WebSocket with dual filtering
-func (w *Watcher) GetSnapshotFilteredByType(namespace string, resourceType string) []ResourceEvent {
-  // Filter by namespace first
-  var resources []*types.Resource
-  if namespace == "" {
-    resources = w.cache.List()
-  } else {
-    resources = w.cache.ListByNamespace(namespace)
-  }
-
-  // Then filter by type
-  filtered := []*types.Resource{}
-  for _, r := range resources {
-    if resourceType == "" || r.Type == resourceType {
-      filtered = append(filtered, r)
-    }
-  }
-  return events
-}
-```
-
-**Frontend Changes**:
-```javascript
-// Fetch stats instantly (no streaming)
-async function fetchAndDisplayStats() {
-  const nsParam = currentNamespace === 'all' ? '' : `?namespace=${currentNamespace}`;
-  const response = await fetch(`/api/stats${nsParam}`);
-  const counts = await response.json();
-
-  // Update stat cards (instant <100ms)
-  document.getElementById('stat-total').textContent = counts.total || 0;
-  // ... other stats
-}
-
-// Reconnect with new filter (lazy load)
-function reconnectWithFilter() {
-  clearResources();
-  fetchAndDisplayStats().then(() => {
-    connect(); // WebSocket with ?type= parameter
-  });
-}
-
-// Build WebSocket URL with dual filtering
-const params = [];
-if (currentNamespace !== 'all') params.push(`namespace=${currentNamespace}`);
-if (currentFilter !== 'all') params.push(`type=${currentFilter}`);
-const wsUrl = `/ws${params.length > 0 ? '?' + params.join('&') : ''}`;
-```
-
-### Performance Impact
-
-**Network Transfer Reduction**:
-- Pods: 1,218 resources (60% reduction vs all types)
-- Deployments: 171 resources (94% reduction)
-- Services: 575 resources (81% reduction)
-- Ingress: 72 resources (98% reduction)
-
-**Load Time Improvements**:
-- Stats loading: <100ms (vs 2-5s for full snapshot)
-- Filter switching: <1s (reconnect + filtered snapshot)
-- 20k cluster becomes manageable with instant stats + lazy lists
-
----
-
-## 6.7. Phase 3 Continued (Context Switching Fixes - 2025-11-30)
-
-### What Was Fixed
-
-Three critical state synchronization bugs that violated the data-centric reactive paradigm were identified and fixed.
-
-✅ **Bug Fixes**
-
-1. **Context dropdown reverts on page refresh**
-   - **Root cause**: Frontend queried `/api/contexts` which returns kubeconfig's "current" field, not the actual running backend context (`App.context`)
-   - **Solution**: Added `fetchCurrentContext()` method that queries `/api/context/current` on page init
-   - **Impact**: Context dropdown now correctly shows the running context even after page refresh
-   - **Architecture**: Backend's `App.context` is now the single source of truth
-
-2. **Resource counts don't update after context switch**
-   - **Root cause**: `fetchAndDisplayStats()` called immediately after switch, before new watcher's cache synced
-   - **Solution**: Moved data fetching to `handleSyncStatus()` reactive handler
-   - **Impact**: Stats update when `SYNC_STATUS synced=true` event arrives, guaranteeing fresh data
-   - **Architecture**: Eliminates race condition by trusting backend's state machine
-
-3. **Namespaces don't repopulate after context switch**
-   - **Root cause**: `fetchNamespaces()` called before new watcher's cache synced
-   - **Solution**: Moved namespace fetching to `handleSyncStatus()` reactive handler
-   - **Impact**: Namespace dropdown populates with new context's namespaces when ready
-   - **Architecture**: Event-driven updates replace imperative timing
-
-✅ **Enhancement Added**
-
-- **Automatic namespace reset on context switch**
-  - Namespace filter automatically resets to "all" when switching contexts
-  - Prevents confusion from stale namespace selections that don't exist in new cluster
-  - Gives full view of new cluster immediately
-  - Persisted to localStorage for consistency
-
-### Technical Implementation
-
-**Files Modified**: 1 file only (`internal/server/static/app.js`), ~30 lines changed
-
-**Key Changes**:
-
-1. **Added `fetchCurrentContext()` method**:
-```javascript
-async fetchCurrentContext() {
-  const response = await fetch('/api/context/current');
-  const data = await response.json();
-  if (this.contextDropdown) {
-    this.contextDropdown.setValue(data.context);
-  }
-}
-```
-
-2. **Modified `init()` to query backend state first**:
-```javascript
-async init() {
-  // ... setup ...
-  await this.fetchCurrentContext();  // NEW: Get actual backend context
-  this.fetchAndDisplayContexts();    // Then get available options
-  // ... rest of init ...
-}
-```
-
-3. **Modified `fetchAndDisplayContexts()` to only set options**:
-```javascript
-// REMOVED: Don't set value from kubeconfig's "current" field
-// this.contextDropdown.setValue(currentContext);
-```
-
-4. **Modified `handleSyncStatus()` for reactive data fetching**:
-```javascript
-handleSyncStatus(syncEvent) {
-  // ... update state ...
-  this.updateSyncUI();
-
-  // NEW: Reactive data fetching when synced
-  if (syncEvent.synced && !syncEvent.syncing) {
-    this.fetchNamespaces();
-    this.fetchAndDisplayStats();
-  }
-}
-```
-
-5. **Modified `switchContext()` to remove premature fetches**:
-```javascript
-async switchContext(newContext) {
-  // ... POST to backend ...
-  resetForNewConnection(this.state);
-
-  // Update UI
-  this.contextDropdown.setValue(newContext);
-
-  // NEW: Reset namespace to "all"
-  this.state.filters.namespace = 'all';
-  localStorage.setItem(LOCAL_STORAGE_KEYS.namespace, 'all');
-  this.namespaceDropdown.setValue('all');
-
-  // REMOVED: Premature data fetching
-  // this.fetchNamespaces();
-  // await this.fetchAndDisplayStats();
-
-  // Reconnect (SYNC_STATUS will trigger data refresh when ready)
-  this.wsManager.connect();
-}
-```
-
-### New Data Flow
-
-**Page Load Sequence**:
-```
-init()
-  ↓
-fetchCurrentContext() → GET /api/context/current → Set dropdown value
-  ↓
-fetchAndDisplayContexts() → GET /api/contexts → Set dropdown options
-  ↓
-fetchNamespaces() → GET /api/namespaces
-  ↓
-fetchAndDisplayStats() → GET /api/stats
-  ↓
-wsManager.connect() → WebSocket with snapshot
-```
-
-**Context Switch Sequence**:
-```
-switchContext(newContext)
-  ↓
-POST /api/context/switch
-  ↓
-resetForNewConnection() + renderResourceList()
-  ↓
-Set context dropdown = newContext
-Set namespace dropdown = "all"
-  ↓
-wsManager.connect()
-  ↓
-[Backend: Stop old → Start new → WaitForCacheSync in background]
-  ↓
-SYNC_STATUS syncing=true → Show loading overlay
-  ↓
-[WaitForCacheSync completes]
-  ↓
-SYNC_STATUS synced=true
-  ↓
-handleSyncStatus() → fetchNamespaces() + fetchAndDisplayStats()
-  ↓
-Fresh data displayed
-```
-
-### Reactive Paradigm Maintained
-
-This solution exemplifies the data-centric reactive architecture:
-
-1. **Single Source of Truth**: `App.context` (backend) is authoritative, not kubeconfig
-2. **Event-Driven Updates**: Backend broadcasts `SYNC_STATUS` events, frontend reacts
-3. **No Polling**: Frontend doesn't guess when data is ready
-4. **Trust Backend's State Machine**: Backend signals readiness, frontend responds
-5. **Clean Separation**: Backend owns K8s state, frontend owns UI rendering
-6. **Pull vs Push Balance**:
-   - Push: Sync status, resource events (timing-critical, state changes)
-   - Pull: Stats, namespaces (computed on-demand, efficient)
-
-### Impact
-
-- **Minimal changes**: 1 file, ~30 lines modified
-- **No backend changes**: All endpoints (`/api/context/current`, `/api/stats`, `/api/namespaces`) already existed
-- **Improved UX**: Consistent state across page refreshes and context switches
-- **Eliminated race conditions**: Data always fresh when displayed
-- **Architectural correctness**: Pure reactive paradigm without imperative timing
-
----
-
-## 6.8. Frontend Architecture (Modular Data-Centric Design)
-
-### What Was Refactored
-
-The frontend evolved from a single-file prototype into a **modular, data-centric architecture** following ES6 module patterns:
-
-✅ **File Structure** (`internal/server/static/`)
-```
-├── index.html        # HTML structure only (8.7KB)
-├── style.css         # All styles (16.3KB)
-├── app.js            # Main application logic (26.9KB)
-├── config.js         # Configuration constants (717 bytes)
-├── state.js          # State management (962 bytes)
-├── ws.js             # WebSocket connection management (1.9KB)
-└── dropdown.js       # Reusable dropdown component (4.9KB)
-```
-
-### Module Responsibilities
-
-**config.js** - Central configuration
-- Resource types list (`RESOURCE_TYPES`)
-- API endpoint paths (`API_PATHS`)
-- Relationship type definitions (`RELATIONSHIP_TYPES`)
-- localStorage keys (`LOCAL_STORAGE_KEYS`)
-- Constants (events limit, etc.)
-
-**state.js** - State management
-- `createInitialState()` - Initialize application state
-- `resetForNewConnection()` - Clear state for reconnections
-- State structure: resources, filters, UI state, WebSocket state, log state
-
-**ws.js** - WebSocket lifecycle
-- `createResourceSocket()` - Factory for WebSocket manager
-- Connection management with auto-reconnect
-- Connection ID tracking to prevent race conditions
-- Snapshot completion detection
-- Configurable handlers (onOpen, onMessage, onClose, onError)
-
-**dropdown.js** - Reusable component
-- Custom web component (`<k8v-dropdown>`)
-- Searchable dropdown with keyboard navigation
-- Used for namespace and container selection
-- Emits standard change events
-
-**app.js** - Application orchestration
-- Main `App` class coordinating all functionality
-- UI event handling and rendering
-- Resource list management with incremental updates
-- Detail panel and logs viewer
-- Search and filtering logic
-- Namespace and resource type switching
-
-**index.html** - Markup only
-- Semantic HTML structure
-- No inline JavaScript (all in modules)
-- Minimal inline styles (button styling only)
-
-**style.css** - Complete styling
-- Glassmorphic dark theme
-- Responsive grid layouts
-- Component styles (cards, dropdowns, panels)
-- Animation and transition definitions
-
-### Architecture Benefits
-
-1. **Separation of Concerns**: Each file has a single, clear responsibility
-2. **Testability**: Modules can be tested independently
-3. **Maintainability**: Easy to locate and modify specific functionality
-4. **Reusability**: Components like dropdown can be reused
-5. **Code Organization**: Logical grouping by function, not file size
-6. **Performance**: Browser can cache individual modules
-7. **Developer Experience**: Easier to navigate and understand codebase
-
-### Data Flow
-
-```
-User Action
-    ↓
-app.js (Event Handler)
-    ↓
-state.js (Update State)
-    ↓
-ws.js (Send to Server) OR app.js (Update UI)
-    ↓
-app.js (Render Changes)
-    ↓
-DOM Update
-```
-
-### Key Design Patterns
-
-- **Module Pattern**: ES6 imports/exports for clean dependencies
-- **Factory Pattern**: `createResourceSocket()`, `createInitialState()`
-- **Observer Pattern**: WebSocket handlers, event listeners
-- **Component Pattern**: Custom web component (dropdown)
-- **Singleton Pattern**: Single App instance manages global state
-
----
-
-## 6.8. Server Logging and Debugging
-
-### What Was Implemented
-
-The server includes comprehensive logging to help with debugging, monitoring, and understanding server behavior. All logs are written to both **stdout** and a persistent log file.
-
-✅ **Logger Implementation** (`internal/server/logger.go`)
-- Multi-writer logger (stdout + file)
-- Single log file: `logs/k8v.log`
-- Session markers with timestamps
-- Graceful shutdown logging
-
-✅ **HTTP Request Logging Middleware**
-- Every HTTP request logged with:
-  - Remote address
-  - HTTP method and path
-  - Status code
-  - Request duration
-- Format: `[::1]:41768 GET /ws - 500 - 174.853µs`
-
-✅ **WebSocket Connection Logging**
-- Connection/disconnection events with client counts
-- Filter parameters (namespace, resource type)
-- Snapshot transmission progress
-- Error messages with context
-- Tagged with `[WebSocket]` prefix
-
-✅ **Log Streaming Logging**
-- Pod log streaming events
-- Container selection tracking
-- Tagged with `[LogStream]` and `[LogHub]` prefixes
-
-### Log File Location
-
-```
-logs/
-└── k8v.log  # Single append-only log file
-```
-
-### Log Format
-
-Each server session is marked with timestamps:
-```
-2025/11/29 02:11:56 === K8V Server Started (2025-11-29 02:11:56) ===
-2025/11/29 02:11:56 Connecting to Kubernetes cluster...
-2025/11/29 02:11:56 ✓ Connected to Kubernetes cluster
-...
-2025/11/29 02:15:30 === K8V Server Stopped ===
-```
-
-### Debugging with Logs
-
-**1. Check for Errors**
-```bash
-# View all errors
-grep -i error logs/k8v.log
-
-# View recent errors (last 50 lines)
-tail -50 logs/k8v.log | grep -i error
-```
-
-**2. Monitor HTTP Requests**
-```bash
-# View all HTTP requests
-grep "GET\|POST\|PUT\|DELETE" logs/k8v.log
-
-# Find failed requests (4xx/5xx status codes)
-grep " - [45][0-9][0-9] - " logs/k8v.log
-```
-
-**3. Track WebSocket Issues**
-```bash
-# View WebSocket events
-grep "\[WebSocket\]" logs/k8v.log
-
-# Check connection/disconnection patterns
-grep "Client connected\|Client disconnected" logs/k8v.log
-
-# Find WebSocket errors
-grep "\[WebSocket\].*error\|Upgrade failed" logs/k8v.log
-```
-
-**4. Monitor Log Streaming**
-```bash
-# View log streaming events
-grep "\[LogStream\]\|\[LogHub\]" logs/k8v.log
-
-# Check for streaming errors
-grep "\[LogStream\].*error" logs/k8v.log
-```
-
-**5. Find Recent Sessions**
-```bash
-# List all server start times
-grep "=== K8V Server Started" logs/k8v.log
-
-# View only the latest session
-awk '/=== K8V Server Started/{p=1} p' logs/k8v.log | tail -100
-```
-
-**6. Real-time Monitoring**
-```bash
-# Watch logs in real-time
-tail -f logs/k8v.log
-
-# Watch only errors
-tail -f logs/k8v.log | grep --line-buffered -i error
-```
-
-### Common Issues and Log Patterns
-
-**WebSocket Connection Failures**
-```
-[WebSocket] Upgrade failed: websocket: response does not implement http.Hijacker
-```
-- **Cause:** Middleware not implementing `http.Hijacker` interface
-- **Fix:** Ensure `responseWriter` wrapper implements `Hijack()` method
-
-**Snapshot Transmission Issues**
-```
-[WebSocket] Failed to send snapshot event 1234/5000: write: broken pipe
-```
-- **Cause:** Client disconnected during snapshot transmission
-- **Fix:** Normal behavior, client reconnection will retry
-
-**High Request Duration**
-```
-[::1]:41822 GET /api/stats - 200 - 5.234s
-```
-- **Cause:** Slow Kubernetes API response or large cluster
-- **Impact:** May indicate performance bottleneck
-
-**Connection Spikes**
-```
-[WebSocket] Client connected (total: 50)
-```
-- **Monitor:** Unusual client counts may indicate reconnection storms
-- **Action:** Check frontend reconnection logic
-
-### Using Logs for Debugging (For Claude)
-
-When debugging issues, Claude should:
-
-1. **Read the log file** first: `Read /home/user/code/k8v/logs/k8v.log`
-2. **Identify error patterns**: Look for repeated errors or error sequences
-3. **Check timestamps**: Correlate errors with user actions
-4. **Trace request flow**: Follow HTTP → WebSocket → Backend chain
-5. **Examine context**: Look at logs before/after the error
-
-**Example debugging workflow:**
-```
-1. User reports: "Pod logs not loading"
-2. Claude reads: logs/k8v.log
-3. Claude searches: "[LogStream]" patterns
-4. Claude finds: "Streaming error for default/pod-1/container: pod not found"
-5. Claude identifies: Pod may have been deleted or namespace mismatch
-6. Claude suggests: Verify pod exists, check namespace filter
-```
-
-### Log File Management
-
-**The log file is append-only and not rotated automatically.**
-
-To prevent unbounded growth:
-```bash
-# Check log file size
-ls -lh logs/k8v.log
-
-# Manually truncate (backup first!)
-cp logs/k8v.log logs/k8v.log.backup
-> logs/k8v.log
-
-# Or use logrotate (optional)
-# Add to /etc/logrotate.d/k8v
-```
-
-**Note:** The `logs/` directory is gitignored.
+## 6. Phases Summary
+
+### Phase 2 (Production-Ready - 2025-11-27)
+- Incremental DOM updates (no flickering, preserved scroll)
+- WebSocket race condition fix (synchronous snapshot, handles 21k+ resources)
+- UI polish (compact stats, alphabetical sorting, removed ALL filter)
+
+### Phase 3 Early Progress (2025-11-27/28/30)
+**Namespace Filtering**: Server-side filtering (200x network reduction), searchable dropdown with keyboard navigation
+**Performance**: Lazy loading by resource type (40-100x reduction), instant stats API
+**Context Switching**: Multi-cluster support with reactive state management
+**Frontend Architecture**: Modular ES6 modules (config.js, state.js, ws.js, dropdown.js)
+**Logging**: Server logging to logs/k8v.log with request/WebSocket tracking
 
 ---
 
@@ -1383,95 +635,159 @@ These features complete the core MVP requirements from IDEAS.md:
 
 ---
 
-## 7. Phase 1 Complete (Production Backend + Minimal Frontend)
+## 6.10. Phase 3 Continued (Pod Log Viewer Enhancements - 2025-12-01)
 
 ### What Was Built
 
-✅ **Go Project Setup**
-- Production directory structure (cmd/, internal/types, internal/k8s, internal/server)
-- Dependencies: client-go v0.31.0, gorilla/websocket, sigs.k8s.io/yaml
-- Single binary build with embedded web assets
+Major improvements to the pod log viewer with configurable viewing modes and data-driven architecture.
 
-✅ **Data Model Implementation**
-- Complete Resource struct with 8 relationship types
-- **Generic relationship system** with RelationshipType enum
-- Thread-safe ResourceCache
-- Bidirectional relationship computation
+✅ **Log Viewing Modes**
+- Six configurable modes with keyboard shortcuts (1-6)
+- **Head** (1): Show first 500 lines from beginning
+- **Tail** (2): Show last 100 lines then follow (default)
+- **Last 5m** (3): Show logs from last 5 minutes with follow
+- **Last 15m** (4): Show logs from last 15 minutes with follow
+- **Last 500** (5): Show last 500 lines with follow
+- **Last 1000** (6): Show last 1000 lines with follow
 
-✅ **Kubernetes Integration**
-- Kubeconfig loading (supports both local and in-cluster)
-- SharedInformerFactory pattern for efficiency
-- Watcher with event handlers for 7 resource types
-- Transformers: Pod, Deployment, ReplicaSet, Service, Ingress, ConfigMap, Secret
+✅ **Data-Driven Architecture**
+- LOG_MODES migrated from object to array with metadata (id, label, hotkey)
+- Moved from app.js to config.js (separation of data and logic)
+- Buttons auto-generated from data during initialization
+- Hotkey handlers generated dynamically from data
+- Click handlers attached inline during creation
 
-✅ **WebSocket Streaming**
-- HTTP/WebSocket server with hub pattern
-- Initial snapshot + incremental updates
-- Panic recovery for large clusters (2000+ resources tested)
-- Channel buffer optimization (10,000 events)
+✅ **HeadLines Support**
+- Backend counting mechanism to show first N lines
+- K8s API doesn't support this natively (TailLines only gets last N)
+- Implemented line counting in StreamPodLogs()
+- Stops streaming after reaching head limit
 
-✅ **Minimal Frontend**
-- Enhanced table view with all resource types
-- Detail panel with Overview and YAML tabs
-- **Clickable bidirectional relationship navigation**
-- Real-time updates via WebSocket
-- Health indicators (green/yellow/red)
-- Console logging for development (color-coded events)
+### Technical Implementation
 
-✅ **Key Improvements**
-- **Generic Relationship Computation:**
-  - Reduced from 4 specific functions to 1 generic `FindReverseRelationships()`
-  - Type-safe with RelationshipType enum
-  - Scalable: add new relationships without new functions
-  - Cleaner, more maintainable code
+**Backend Changes**:
+- `internal/k8s/logs.go`:
+  - Added `HeadLines *int64` field to LogOptions struct
+  - Added line counting logic with early termination
+  - Sends LOG_END message when head limit reached
+- `internal/server/logs.go`:
+  - Parse `headLines` query parameter
+  - Pass to streaming handler
 
-### Binary Details
+**Frontend Changes**:
+- `internal/server/static/config.js`:
+  ```javascript
+  export const LOG_MODES = [
+    { id: 'head', label: 'Head', hotkey: '1', headLines: 500, tailLines: null, sinceSeconds: null, follow: false },
+    { id: 'tail', label: 'Tail', hotkey: '2', headLines: null, tailLines: 100, sinceSeconds: null, follow: true },
+    // ... 4 more modes
+  ];
+  ```
 
-- **Size:** 62MB
-- **Command:** `./k8v` or `./k8v -port 8080`
-- **Handles:** 2000+ resources tested in production
-- **Performance:** Real-time updates < 500ms latency
+- `internal/server/static/app.js`:
+  - Added `getLogMode(modeId)` helper to find mode by id
+  - Added `renderLogModeButtons()` to generate buttons from data
+  - Updated `setLogMode()` to use helper
+  - Updated `loadLogs()` to add headLines parameter
+  - Updated `handleGlobalKeydown()` to dynamically find mode by hotkey
+  - Removed hardcoded hotkey map
 
-### What's Next (Phase 3 and Beyond)
+- `internal/server/static/index.html`:
+  - Removed all hardcoded button elements
+  - Added empty container `<div id="logs-mode-buttons">` for dynamic generation
 
-**Remaining Phase 3 Tasks:**
+### Architecture Benefits
 
-1. **Enhanced YAML View**
-   - Syntax highlighting for YAML
-   - Clickable resource references in YAML (e.g., click ConfigMap name → navigate to ConfigMap)
-   - Highlight relationship fields (ownerReferences, selectors, etc.)
-   - Copy specific YAML sections
+**Data-Centric Principles Applied**:
+1. **Single Source of Truth**: All mode configuration in one place (config.js)
+2. **Zero Duplication**: Hotkeys defined once, used everywhere
+3. **Easy to Extend**: Adding new mode = one line in config
+4. **Self-Documenting**: Data structure shows all available modes
+5. **Maintainable**: No need to sync HTML/JS/CSS when adding modes
+6. **Pure Data-Centric**: Data drives UI and behavior, not code
 
-2. **Frontend Performance Optimization**
-   - Virtual scrolling/pagination for large resource lists (1000+ resources)
-   - Lazy rendering to prevent lag with many resources
-   - Debounced updates during rapid event streams
-   - Memory optimization for long-running sessions
+**Adding New Mode Example**:
+```javascript
+// In config.js, add one line:
+{ id: 'last-1h', label: '-1h', hotkey: '7', tailLines: null, sinceSeconds: 3600, follow: true }
 
-3. **Enhanced Search**
-   - Search by labels and annotations (currently only searches by name)
-   - Advanced filtering options
-   - Search history
+// Everything auto-generated:
+// - Button with label and hotkey indicator
+// - Hotkey handler (press 7)
+// - Click handler
+// - WebSocket URL parameters
+```
 
-**Future Enhancements:**
+### Key Code Patterns
 
-6. **Additional Kubernetes Resources**
-   - StatefulSets, DaemonSets, Jobs, CronJobs
-   - PersistentVolumes, PersistentVolumeClaims
-   - NetworkPolicies, ServiceAccounts, Roles, RoleBindings
-   - Custom Resource Definitions (CRDs)
+**Head Mode Implementation** (internal/k8s/logs.go):
+```go
+lineCount := int64(0)
+for scanner.Scan() {
+  broadcast <- LogMessage{Type: "LOG_LINE", Line: scanner.Text() + "\n"}
+  lineCount++
 
-7. **Multi-Cluster Support**
-   - Context switching UI
-   - Multiple cluster views
-   - Cross-cluster comparison
+  // Stop if we've reached the head limit
+  if opts.HeadLines != nil && lineCount >= *opts.HeadLines {
+    broadcast <- LogMessage{Type: "LOG_END", Reason: fmt.Sprintf("Head limit reached (%d lines)", *opts.HeadLines)}
+    return nil
+  }
+}
+```
 
-8. **Advanced Features**
-   - Topology graph view (relationship visualization)
-   - Resource editing (kubectl apply)
-   - YAML export/download
-   - Events timeline with filtering
-   - Dark/light theme toggle
+**Data-Driven Button Generation** (app.js):
+```javascript
+renderLogModeButtons() {
+  LOG_MODES.forEach(mode => {
+    const btn = document.createElement('button');
+    btn.className = 'logs-mode-btn';
+    btn.dataset.mode = mode.id;
+    btn.title = `Hotkey: ${mode.hotkey}`;
+
+    // Label and hotkey spans
+    btn.appendChild(createLabel(mode.label));
+    btn.appendChild(createHotkey(mode.hotkey));
+
+    // Inline click handler
+    btn.addEventListener('click', () => this.setLogMode(mode.id));
+
+    container.appendChild(btn);
+  });
+}
+```
+
+**Dynamic Hotkey Handling** (app.js):
+```javascript
+// Before: Hardcoded map
+const modeMap = { '1': 'head', '2': 'tail', ... };
+
+// After: Generated from data
+const mode = LOG_MODES.find(m => m.hotkey === event.key);
+if (mode) this.setLogMode(mode.id);
+```
+
+### Bug Fixes
+
+**Head mode showing last 500 instead of first 500**:
+- Root cause: K8s TailLines parameter always gets last N lines
+- Solution: Added HeadLines field and line counting mechanism
+- Backend now counts lines and stops after N lines from beginning
+
+### UX Improvements
+
+- Hotkeys 1-6 only active when logs tab is open (contextual)
+- Visual mode indicator with active state highlighting
+- Compact labels for better space utilization (-5m, -15m, -500, -1000)
+- Immediate feedback when switching modes
+
+### Impact
+
+This enhancement demonstrates the data-centric architecture in action:
+- Configuration is data, not code
+- UI is generated from data
+- Adding features requires changing data, not logic
+- Maintainability improved significantly
+- Extensibility achieved through pure data
 
 ---
 
@@ -1604,4 +920,4 @@ When making changes, update the relevant sections:
 
 ---
 
-**Last Updated:** 2025-11-30 - Completed three major MVP features: (1) **Pod logs viewer** with real-time WebSocket streaming, container selection, and auto-select first container, (2) **Search functionality** with keyboard shortcut (/) and real-time filtering by name, (3) **Multi-context support** with context dropdown UI, backend API, and reactive state synchronization. These features complete the core functionality requirements from IDEAS.md. Phase 3 is now nearly complete with all essential features implemented.
+**Last Updated:** 2025-12-01 - Enhanced pod log viewer with configurable viewing modes (Head, Tail, Last 5m/15m, Last 500/1000) controlled by keyboard shortcuts (1-6). Implemented data-driven architecture where log modes are defined as configuration data in `config.js` and UI elements (buttons, hotkeys, handlers) are auto-generated from that data. Fixed head mode to correctly show first N lines (added HeadLines field with line counting). This enhancement demonstrates the data-centric architecture principles: single source of truth, zero duplication, easy extensibility through data changes rather than code changes.
