@@ -94,6 +94,7 @@ func (s *Server) Start() error {
 	http.HandleFunc("/api/context/current", s.logger.LoggingMiddleware(s.handleCurrentContext))
 	http.HandleFunc("/api/context/switch", s.logger.LoggingMiddleware(s.handleSwitchContext))
 	http.HandleFunc("/api/sync/status", s.logger.LoggingMiddleware(s.handleSyncStatus))
+	http.HandleFunc("/api/resource", s.logger.LoggingMiddleware(s.handleGetResource))
 	http.HandleFunc("/ws", s.logger.LoggingMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		s.handleWebSocket(w, r)
 	}))

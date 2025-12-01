@@ -120,3 +120,21 @@ func (s *Server) handleSyncStatus(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(status)
 }
+
+// handleGetResource returns a single resource by ID
+func (s *Server) handleGetResource(w http.ResponseWriter, r *http.Request) {
+	resourceID := r.URL.Query().Get("id")
+	if resourceID == "" {
+		http.Error(w, "id parameter is required", http.StatusBadRequest)
+		return
+	}
+
+	resource, found := s.watcherProvider.GetWatcher().GetResource(resourceID)
+	if !found {
+		http.Error(w, "resource not found", http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(resource)
+}

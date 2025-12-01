@@ -22,6 +22,7 @@ export const RELATIONSHIP_TYPES = [
 export const API_PATHS = {
   namespaces: '/api/namespaces',
   stats: '/api/stats',
+  resource: '/api/resource',
   resourcesWs: '/ws',
   logsWs: '/ws/logs',
 };

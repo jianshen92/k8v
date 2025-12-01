@@ -291,6 +291,27 @@ class App {
     }
   }
 
+  // Fetch a single resource by ID from the backend
+  async fetchResource(resourceId) {
+    try {
+      const response = await fetch(`${API_PATHS.resource}?id=${encodeURIComponent(resourceId)}`);
+
+      if (!response.ok) {
+        if (response.status === 404) {
+          throw new Error(`Resource not found: ${resourceId}`);
+        }
+        throw new Error(`Failed to fetch resource: ${response.statusText}`);
+      }
+
+      const resource = await response.json();
+      this.state.resources.set(resource.id, resource);
+      return resource;
+    } catch (error) {
+      console.error('Error fetching resource:', error);
+      throw error;
+    }
+  }
+
   // ---------- Resources rendering ----------
   typeToClass(t) { return t.toLowerCase(); }
 
@@ -576,9 +597,18 @@ class App {
     document.getElementById('logs-error-message').textContent = errorMessage;
   }
 
-  showResource(resourceId) {
-    const resource = this.getResourceById(resourceId);
-    if (!resource) return;
+  async showResource(resourceId) {
+    let resource = this.getResourceById(resourceId);
+
+    // If not in cache, fetch from backend
+    if (!resource) {
+      try {
+        resource = await this.fetchResource(resourceId);
+      } catch (error) {
+        alert(`Unable to load resource: ${error.message}`);
+        return;
+      }
+    }
 
     if (this.state.log.socket) {
       this.state.log.socket.close();

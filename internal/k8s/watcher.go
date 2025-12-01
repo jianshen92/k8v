@@ -629,6 +629,11 @@ func (w *Watcher) GetSnapshotFilteredByType(namespace string, resourceType strin
 	return events
 }
 
+// GetResource retrieves a single resource from the cache by ID
+func (w *Watcher) GetResource(id string) (*types.Resource, bool) {
+	return w.cache.Get(id)
+}
+
 // StreamPodLogs delegates to the client's StreamPodLogs method
 func (w *Watcher) StreamPodLogs(ctx context.Context, namespace, podName, containerName string, broadcast chan<- LogMessage) error {
 	return w.client.StreamPodLogs(ctx, namespace, podName, containerName, broadcast)
