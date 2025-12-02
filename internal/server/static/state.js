@@ -22,6 +22,7 @@ export function createInitialState() {
       activeDetailTab: 'overview',
       detailResourceId: null,
       detailFullscreen: false,
+      selectedRowIndex: -1,
     },
     ws: {
       connectionId: 0,

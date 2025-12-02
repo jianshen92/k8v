@@ -69,3 +69,75 @@ export function getCommandSuggestions(input) {
     cmd.aliases.some(alias => alias.startsWith(normalized))
   );
 }
+
+// Table view column configuration (kubectl-style)
+export const TABLE_COLUMNS = {
+  Pod: [
+    { id: 'name', label: 'NAME', width: '200px', align: 'left', sortable: true },
+    { id: 'ready', label: 'READY', width: '80px', align: 'center', sortable: false },
+    { id: 'status', label: 'STATUS', width: '120px', align: 'left', sortable: false },
+    { id: 'restarts', label: 'RESTARTS', width: '90px', align: 'center', sortable: false },
+    { id: 'age', label: 'AGE', width: '80px', align: 'right', sortable: false },
+    { id: 'namespace', label: 'NAMESPACE', width: '150px', align: 'left', sortable: false },
+  ],
+  Deployment: [
+    { id: 'name', label: 'NAME', width: '200px', align: 'left', sortable: true },
+    { id: 'ready', label: 'READY', width: '80px', align: 'center', sortable: false },
+    { id: 'upToDate', label: 'UP-TO-DATE', width: '100px', align: 'center', sortable: false },
+    { id: 'available', label: 'AVAILABLE', width: '100px', align: 'center', sortable: false },
+    { id: 'age', label: 'AGE', width: '80px', align: 'right', sortable: false },
+    { id: 'namespace', label: 'NAMESPACE', width: '150px', align: 'left', sortable: false },
+  ],
+  ReplicaSet: [
+    { id: 'name', label: 'NAME', width: '250px', align: 'left', sortable: true },
+    { id: 'desired', label: 'DESIRED', width: '80px', align: 'center', sortable: false },
+    { id: 'current', label: 'CURRENT', width: '80px', align: 'center', sortable: false },
+    { id: 'ready', label: 'READY', width: '80px', align: 'center', sortable: false },
+    { id: 'age', label: 'AGE', width: '80px', align: 'right', sortable: false },
+    { id: 'namespace', label: 'NAMESPACE', width: '150px', align: 'left', sortable: false },
+  ],
+  Service: [
+    { id: 'name', label: 'NAME', width: '200px', align: 'left', sortable: true },
+    { id: 'type', label: 'TYPE', width: '120px', align: 'left', sortable: false },
+    { id: 'clusterIp', label: 'CLUSTER-IP', width: '120px', align: 'left', sortable: false },
+    { id: 'externalIp', label: 'EXTERNAL-IP', width: '120px', align: 'left', sortable: false },
+    { id: 'ports', label: 'PORT(S)', width: '150px', align: 'left', sortable: false },
+    { id: 'age', label: 'AGE', width: '80px', align: 'right', sortable: false },
+    { id: 'namespace', label: 'NAMESPACE', width: '150px', align: 'left', sortable: false },
+  ],
+  Ingress: [
+    { id: 'name', label: 'NAME', width: '200px', align: 'left', sortable: true },
+    { id: 'class', label: 'CLASS', width: '120px', align: 'left', sortable: false },
+    { id: 'hosts', label: 'HOSTS', width: '250px', align: 'left', sortable: false },
+    { id: 'address', label: 'ADDRESS', width: '150px', align: 'left', sortable: false },
+    { id: 'ports', label: 'PORTS', width: '100px', align: 'left', sortable: false },
+    { id: 'age', label: 'AGE', width: '80px', align: 'right', sortable: false },
+    { id: 'namespace', label: 'NAMESPACE', width: '150px', align: 'left', sortable: false },
+  ],
+  ConfigMap: [
+    { id: 'name', label: 'NAME', width: '250px', align: 'left', sortable: true },
+    { id: 'data', label: 'DATA', width: '80px', align: 'center', sortable: false },
+    { id: 'age', label: 'AGE', width: '80px', align: 'right', sortable: false },
+    { id: 'namespace', label: 'NAMESPACE', width: '150px', align: 'left', sortable: false },
+  ],
+  Secret: [
+    { id: 'name', label: 'NAME', width: '250px', align: 'left', sortable: true },
+    { id: 'type', label: 'TYPE', width: '200px', align: 'left', sortable: false },
+    { id: 'data', label: 'DATA', width: '80px', align: 'center', sortable: false },
+    { id: 'age', label: 'AGE', width: '80px', align: 'right', sortable: false },
+    { id: 'namespace', label: 'NAMESPACE', width: '150px', align: 'left', sortable: false },
+  ],
+  Node: [
+    { id: 'name', label: 'NAME', width: '200px', align: 'left', sortable: true },
+    { id: 'status', label: 'STATUS', width: '100px', align: 'left', sortable: false },
+    { id: 'roles', label: 'ROLES', width: '150px', align: 'left', sortable: false },
+    { id: 'age', label: 'AGE', width: '80px', align: 'right', sortable: false },
+    { id: 'version', label: 'VERSION', width: '120px', align: 'left', sortable: false },
+    { id: 'internalIp', label: 'INTERNAL-IP', width: '120px', align: 'left', sortable: false },
+    { id: 'externalIp', label: 'EXTERNAL-IP', width: '120px', align: 'left', sortable: false },
+  ],
+};
+
+export function getColumnsForType(resourceType) {
+  return TABLE_COLUMNS[resourceType] || [];
+}

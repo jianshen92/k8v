@@ -1,7 +1,203 @@
-import { API_PATHS, COMMANDS, EVENTS_LIMIT, LOCAL_STORAGE_KEYS, LOG_MODES, RELATIONSHIP_TYPES, RESOURCE_TYPES, findCommand, getCommandSuggestions } from './config.js';
+import { API_PATHS, COMMANDS, EVENTS_LIMIT, LOCAL_STORAGE_KEYS, LOG_MODES, RELATIONSHIP_TYPES, RESOURCE_TYPES, findCommand, getCommandSuggestions, getColumnsForType } from './config.js';
 import { createInitialState, resetForNewConnection } from './state.js';
 import { createResourceSocket } from './ws.js';
 import './dropdown.js';
+
+// ========== Data Extraction Helper Functions ==========
+// These functions extract cell values from resource objects for table columns
+
+function extractCellValue(resource, columnId) {
+  switch (columnId) {
+    case 'name':
+      return resource.name;
+    case 'namespace':
+      return resource.namespace || '-';
+    case 'age':
+      return formatAge(resource.createdAt);
+    case 'status':
+      return resource.status?.phase || '-';
+    case 'ready':
+      return resource.status?.ready || '-';
+
+    // Pod-specific
+    case 'restarts':
+      return getPodRestartCount(resource);
+
+    // Deployment-specific
+    case 'upToDate':
+      return resource.spec?.status?.updatedReplicas ?? '-';
+    case 'available':
+      return resource.spec?.status?.availableReplicas ?? '-';
+
+    // ReplicaSet-specific
+    case 'desired':
+      return resource.spec?.spec?.replicas ?? '-';
+    case 'current':
+      return resource.spec?.status?.replicas ?? '-';
+
+    // Service-specific
+    case 'type':
+      return getServiceType(resource);
+    case 'clusterIp':
+      return getServiceClusterIp(resource);
+    case 'externalIp':
+      return getServiceExternalIp(resource);
+    case 'ports':
+      return getServicePorts(resource);
+
+    // Ingress-specific
+    case 'class':
+      return getIngressClass(resource);
+    case 'hosts':
+      return getIngressHosts(resource);
+    case 'address':
+      return getIngressAddress(resource);
+
+    // ConfigMap/Secret-specific
+    case 'data':
+      return getDataCount(resource);
+
+    // Node-specific
+    case 'roles':
+      return getNodeRoles(resource);
+    case 'version':
+      return getNodeVersion(resource);
+    case 'internalIp':
+      return getNodeInternalIp(resource);
+    case 'externalIp':
+      return getNodeExternalIp(resource);
+
+    default:
+      return '-';
+  }
+}
+
+function formatAge(createdAt) {
+  if (!createdAt) return '-';
+  const now = new Date();
+  const created = new Date(createdAt);
+  const diffMs = now - created;
+  const diffSec = Math.floor(diffMs / 1000);
+  const diffMin = Math.floor(diffSec / 60);
+  const diffHour = Math.floor(diffMin / 60);
+  const diffDay = Math.floor(diffHour / 24);
+
+  if (diffDay > 0) return `${diffDay}d`;
+  if (diffHour > 0) return `${diffHour}h`;
+  if (diffMin > 0) return `${diffMin}m`;
+  return `${diffSec}s`;
+}
+
+function getPodRestartCount(resource) {
+  if (!resource.spec?.status?.containerStatuses) return '0';
+  const totalRestarts = resource.spec.status.containerStatuses.reduce((sum, container) => {
+    return sum + (container.restartCount || 0);
+  }, 0);
+  return totalRestarts.toString();
+}
+
+function getServiceType(resource) {
+  return resource.spec?.spec?.type || 'ClusterIP';
+}
+
+function getServiceClusterIp(resource) {
+  return resource.spec?.spec?.clusterIP || '-';
+}
+
+function getServiceExternalIp(resource) {
+  const spec = resource.spec?.spec;
+  if (!spec) return '<none>';
+
+  // Check for LoadBalancer IPs
+  if (resource.spec?.status?.loadBalancer?.ingress) {
+    const ips = resource.spec.status.loadBalancer.ingress
+      .map(ing => ing.ip || ing.hostname)
+      .filter(Boolean);
+    if (ips.length > 0) return ips.join(',');
+  }
+
+  // Check for ExternalIPs
+  if (spec.externalIPs && spec.externalIPs.length > 0) {
+    return spec.externalIPs.join(',');
+  }
+
+  return '<none>';
+}
+
+function getServicePorts(resource) {
+  const ports = resource.spec?.spec?.ports;
+  if (!ports || ports.length === 0) return '-';
+
+  return ports.map(p => {
+    const port = p.port;
+    const nodePort = p.nodePort ? `:${p.nodePort}` : '';
+    const protocol = p.protocol && p.protocol !== 'TCP' ? `/${p.protocol}` : '';
+    return `${port}${nodePort}${protocol}`;
+  }).join(',');
+}
+
+function getIngressClass(resource) {
+  return resource.spec?.spec?.ingressClassName ||
+         resource.annotations?.['kubernetes.io/ingress.class'] ||
+         '-';
+}
+
+function getIngressHosts(resource) {
+  const rules = resource.spec?.spec?.rules;
+  if (!rules || rules.length === 0) return '*';
+
+  const hosts = rules.map(r => r.host || '*').filter(Boolean);
+  return hosts.join(',') || '*';
+}
+
+function getIngressAddress(resource) {
+  const ingress = resource.spec?.status?.loadBalancer?.ingress;
+  if (!ingress || ingress.length === 0) return '-';
+
+  const addresses = ingress.map(ing => ing.ip || ing.hostname).filter(Boolean);
+  return addresses.join(',') || '-';
+}
+
+function getDataCount(resource) {
+  const data = resource.spec?.data;
+  if (!data) return '0';
+  return Object.keys(data).length.toString();
+}
+
+function getNodeRoles(resource) {
+  const labels = resource.labels || {};
+  const roles = [];
+
+  for (const [key, value] of Object.entries(labels)) {
+    if (key === 'node-role.kubernetes.io/master' || key === 'node-role.kubernetes.io/control-plane') {
+      roles.push('control-plane');
+    } else if (key.startsWith('node-role.kubernetes.io/')) {
+      roles.push(key.replace('node-role.kubernetes.io/', ''));
+    }
+  }
+
+  return roles.length > 0 ? roles.join(',') : '<none>';
+}
+
+function getNodeVersion(resource) {
+  return resource.spec?.status?.nodeInfo?.kubeletVersion || '-';
+}
+
+function getNodeInternalIp(resource) {
+  const addresses = resource.spec?.status?.addresses;
+  if (!addresses) return '-';
+
+  const internal = addresses.find(addr => addr.type === 'InternalIP');
+  return internal?.address || '-';
+}
+
+function getNodeExternalIp(resource) {
+  const addresses = resource.spec?.status?.addresses;
+  if (!addresses) return '<none>';
+
+  const external = addresses.find(addr => addr.type === 'ExternalIP');
+  return external?.address || '<none>';
+}
 
 class App {
   constructor() {
@@ -68,18 +264,18 @@ class App {
 
   updateSyncUI() {
     const loadingState = document.getElementById('loading-state');
-    const resourceList = document.getElementById('resource-list');
+    const resourceTableWrapper = document.querySelector('.resource-table-wrapper');
     const loadingText = loadingState?.querySelector('.loading-text');
     const loadingSubtext = document.getElementById('loading-subtext');
 
     if (this.state.sync.syncing) {
       if (loadingState) loadingState.style.display = 'flex';
-      if (resourceList) resourceList.style.display = 'none';
+      if (resourceTableWrapper) resourceTableWrapper.style.display = 'none';
       if (loadingText) loadingText.textContent = 'Syncing informer caches...';
       if (loadingSubtext) loadingSubtext.textContent = 'This may take a while for large clusters';
     } else if (this.state.sync.synced) {
       if (loadingState) loadingState.style.display = 'none';
-      if (resourceList) resourceList.style.display = 'grid';
+      if (resourceTableWrapper) resourceTableWrapper.style.display = 'block';
     } else if (this.state.sync.error) {
       if (loadingState) loadingState.style.display = 'flex';
       if (loadingText) loadingText.textContent = 'Sync failed';
@@ -478,6 +674,20 @@ class App {
       return;
     }
 
+    // Table row navigation
+    if (!isInputFocused && (event.key === 'ArrowUp' || event.key === 'k' || event.key === 'ArrowDown' || event.key === 'j')) {
+      event.preventDefault();
+      this.handleTableNavigation(event.key);
+      return;
+    }
+
+    // Enter to open selected row's detail panel
+    if (event.key === 'Enter' && !isInputFocused && this.state.ui.selectedRowIndex >= 0) {
+      event.preventDefault();
+      this.openSelectedRowDetail();
+      return;
+    }
+
     if (event.key === 'd' && !isInputFocused) {
       event.preventDefault();
       this.toggleDebugDrawer();
@@ -591,51 +801,83 @@ class App {
     }
   }
 
-  // ---------- Resources rendering ----------
+  // ---------- Resources rendering (Table View) ----------
   typeToClass(t) { return t.toLowerCase(); }
 
-  createResourceElement(r) {
-    const item = document.createElement('div');
-    item.className = `resource-item ${this.typeToClass(r.type)}`;
-    item.dataset.resourceId = r.id;
-    item.addEventListener('click', () => this.showResource(r.id));
+  renderTableHeader() {
+    const headerRow = document.getElementById('table-header-row');
+    headerRow.innerHTML = '';
 
-    const icon = document.createElement('div');
-    icon.className = `resource-icon ${this.typeToClass(r.type)}`;
-    icon.textContent = r.type[0];
+    const columns = getColumnsForType(this.state.filters.type);
 
-    const header = document.createElement('div');
-    header.className = 'resource-header';
+    columns.forEach(column => {
+      const th = document.createElement('th');
+      th.textContent = column.label;
+      th.style.width = column.width;
+      th.classList.add(`align-${column.align}`);
 
-    const info = document.createElement('div');
-    info.className = 'resource-info';
+      if (column.sortable) {
+        th.classList.add('sortable');
+        th.setAttribute('title', 'Click to sort by ' + column.label);
+      }
 
-    const name = document.createElement('div');
-    name.className = 'resource-name';
-    name.textContent = r.name;
+      headerRow.appendChild(th);
+    });
+  }
 
-    const sub = document.createElement('div');
-    sub.className = 'resource-subtitle';
-    sub.textContent = `${r.namespace || '-'} • ${r.type}`;
+  createTableRow(resource, rowIndex) {
+    const row = document.createElement('tr');
+    row.className = this.typeToClass(resource.type);
+    row.dataset.resourceId = resource.id;
+    row.dataset.rowIndex = rowIndex;
 
-    info.appendChild(name);
-    info.appendChild(sub);
+    // Mark as selected if this is the selected row
+    if (rowIndex === this.state.ui.selectedRowIndex) {
+      row.classList.add('selected');
+    }
 
-    const statusDot = document.createElement('div');
-    statusDot.className = `resource-status ${r.health || 'unknown'}`;
+    // Click to open detail panel
+    row.addEventListener('click', () => {
+      this.selectRow(rowIndex);
+      this.showResource(resource.id);
+    });
 
-    header.appendChild(info);
-    header.appendChild(statusDot);
+    const columns = getColumnsForType(resource.type);
 
-    item.appendChild(icon);
-    item.appendChild(header);
+    columns.forEach(column => {
+      const td = document.createElement('td');
+      td.classList.add(`align-${column.align}`);
 
-    return item;
+      // Special handling for name column (add health indicator)
+      if (column.id === 'name') {
+        td.classList.add('cell-name', 'cell-with-health');
+
+        const healthDot = document.createElement('div');
+        healthDot.className = `cell-health-dot ${resource.health || 'unknown'}`;
+        td.appendChild(healthDot);
+
+        const nameText = document.createTextNode(extractCellValue(resource, column.id));
+        td.appendChild(nameText);
+      } else if (column.id === 'status') {
+        // Special handling for status column (color coding)
+        td.classList.add('cell-status');
+        const statusValue = extractCellValue(resource, column.id);
+        td.textContent = statusValue;
+        td.classList.add(statusValue.replace(/\s/g, ''));
+      } else {
+        // Regular cell
+        td.textContent = extractCellValue(resource, column.id);
+      }
+
+      row.appendChild(td);
+    });
+
+    return row;
   }
 
   renderResourceList() {
-    const container = document.getElementById('resource-list');
-    container.innerHTML = '';
+    const tbody = document.getElementById('resource-table-body');
+    tbody.innerHTML = '';
 
     const list = Array.from(this.state.resources.values())
       .filter(r => {
@@ -645,9 +887,16 @@ class App {
       })
       .sort((a, b) => a.name.localeCompare(b.name));
 
+    // Render table header
+    this.renderTableHeader();
+
+    // Handle empty state
     if (!list.length) {
-      const empty = document.createElement('div');
-      empty.className = 'empty-state';
+      const row = document.createElement('tr');
+      row.className = 'empty-state-row';
+      const td = document.createElement('td');
+      td.colSpan = getColumnsForType(this.state.filters.type).length;
+
       const emptyMessage = this.state.filters.search
         ? `No ${this.state.filters.type}s matching "${this.state.filters.search}"`
         : `No ${this.state.filters.type}s found`;
@@ -655,27 +904,113 @@ class App {
         ? `in namespace "${this.state.filters.namespace}"`
         : 'in cluster';
 
-      empty.innerHTML = `
+      const emptyContent = document.createElement('div');
+      emptyContent.className = 'empty-state-content';
+      emptyContent.innerHTML = `
         <div><i data-feather="inbox" style="width: 48px; height: 48px; stroke-width: 1.5;"></i></div>
         <div style="font-size: 16px; margin: 12px 0 8px;">${emptyMessage}</div>
-        <div style="font-size: 13px;">${emptyDetail}</div>
+        <div style="font-size: 13px; color: #666;">${emptyDetail}</div>
       `;
-      container.appendChild(empty);
+
+      td.appendChild(emptyContent);
+      row.appendChild(td);
+      tbody.appendChild(row);
       feather.replace();
       return;
     }
 
-    for (const r of list) {
-      container.appendChild(this.createResourceElement(r));
+    // Render rows
+    list.forEach((resource, index) => {
+      tbody.appendChild(this.createTableRow(resource, index));
+    });
+
+    // Reset selection if out of bounds
+    if (this.state.ui.selectedRowIndex >= list.length) {
+      this.state.ui.selectedRowIndex = -1;
+    }
+  }
+
+  selectRow(rowIndex) {
+    // Remove previous selection
+    const previousRow = document.querySelector('.resource-table tbody tr.selected');
+    if (previousRow) {
+      previousRow.classList.remove('selected');
+    }
+
+    // Update state
+    this.state.ui.selectedRowIndex = rowIndex;
+
+    // Add new selection
+    const newRow = document.querySelector(`.resource-table tbody tr[data-row-index="${rowIndex}"]`);
+    if (newRow) {
+      newRow.classList.add('selected');
+      // Scroll into view if needed
+      newRow.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }
+
+  handleTableNavigation(key) {
+    const tbody = document.getElementById('resource-table-body');
+    const rows = tbody.querySelectorAll('tr:not(.empty-state-row)');
+
+    if (rows.length === 0) return;
+
+    let newIndex = this.state.ui.selectedRowIndex;
+
+    // Navigate up (ArrowUp or k)
+    if (key === 'ArrowUp' || key === 'k') {
+      if (newIndex <= 0) {
+        newIndex = 0; // Stay at first row
+      } else {
+        newIndex--;
+      }
+    }
+
+    // Navigate down (ArrowDown or j)
+    if (key === 'ArrowDown' || key === 'j') {
+      if (newIndex < 0) {
+        newIndex = 0; // Start at first row if nothing selected
+      } else if (newIndex >= rows.length - 1) {
+        newIndex = rows.length - 1; // Stay at last row
+      } else {
+        newIndex++;
+      }
+    }
+
+    this.selectRow(newIndex);
+  }
+
+  openSelectedRowDetail() {
+    if (this.state.ui.selectedRowIndex < 0) return;
+
+    const selectedRow = document.querySelector(`.resource-table tbody tr[data-row-index="${this.state.ui.selectedRowIndex}"]`);
+    if (!selectedRow) return;
+
+    const resourceId = selectedRow.dataset.resourceId;
+    if (resourceId) {
+      this.showResource(resourceId);
     }
   }
 
   updateResourceInList(resourceId, eventType) {
-    const container = document.getElementById('resource-list');
-    const existingElement = container.querySelector(`[data-resource-id="${resourceId}"]`);
+    const tbody = document.getElementById('resource-table-body');
+    const existingRow = tbody.querySelector(`[data-resource-id="${resourceId}"]`);
 
     if (eventType === 'DELETED') {
-      if (existingElement) existingElement.remove();
+      if (existingRow) {
+        const deletedIndex = parseInt(existingRow.dataset.rowIndex, 10);
+        existingRow.remove();
+
+        // Adjust row indices after deletion
+        this.reindexTableRows();
+
+        // Adjust selected index if needed
+        if (this.state.ui.selectedRowIndex === deletedIndex) {
+          this.state.ui.selectedRowIndex = -1;
+        } else if (this.state.ui.selectedRowIndex > deletedIndex) {
+          this.state.ui.selectedRowIndex--;
+        }
+      }
       return;
     }
 
@@ -687,13 +1022,24 @@ class App {
     const matchesFilter = matchesTypeFilter && matchesSearchFilter;
 
     if (!matchesFilter) {
-      if (existingElement) existingElement.remove();
+      if (existingRow) {
+        const deletedIndex = parseInt(existingRow.dataset.rowIndex, 10);
+        existingRow.remove();
+        this.reindexTableRows();
+
+        if (this.state.ui.selectedRowIndex === deletedIndex) {
+          this.state.ui.selectedRowIndex = -1;
+        } else if (this.state.ui.selectedRowIndex > deletedIndex) {
+          this.state.ui.selectedRowIndex--;
+        }
+      }
       return;
     }
 
-    if (eventType === 'MODIFIED' && existingElement) {
-      const newElement = this.createResourceElement(resource);
-      existingElement.replaceWith(newElement);
+    if (eventType === 'MODIFIED' && existingRow) {
+      const rowIndex = parseInt(existingRow.dataset.rowIndex, 10);
+      const newRow = this.createTableRow(resource, rowIndex);
+      existingRow.replaceWith(newRow);
     } else if (eventType === 'ADDED') {
       const allVisible = Array.from(this.state.resources.values())
         .filter(r => r.type === this.state.filters.type)
@@ -701,24 +1047,40 @@ class App {
         .sort((a, b) => a.name.localeCompare(b.name));
 
       const index = allVisible.findIndex(r => r.id === resourceId);
-      const newElement = this.createResourceElement(resource);
+      const newRow = this.createTableRow(resource, index);
 
-      if (index === allVisible.length - 1 || container.children.length === 0) {
-        container.appendChild(newElement);
+      if (index === allVisible.length - 1 || tbody.children.length === 0) {
+        tbody.appendChild(newRow);
       } else {
         const nextResource = allVisible[index + 1];
         if (nextResource) {
-          const nextElement = container.querySelector(`[data-resource-id="${nextResource.id}"]`);
-          if (nextElement) {
-            container.insertBefore(newElement, nextElement);
+          const nextRow = tbody.querySelector(`[data-resource-id="${nextResource.id}"]`);
+          if (nextRow) {
+            tbody.insertBefore(newRow, nextRow);
           } else {
-            container.appendChild(newElement);
+            tbody.appendChild(newRow);
           }
         } else {
-          container.appendChild(newElement);
+          tbody.appendChild(newRow);
         }
       }
+
+      // Reindex rows after addition
+      this.reindexTableRows();
+
+      // Adjust selected index if needed
+      if (this.state.ui.selectedRowIndex >= index) {
+        this.state.ui.selectedRowIndex++;
+      }
     }
+  }
+
+  reindexTableRows() {
+    const tbody = document.getElementById('resource-table-body');
+    const rows = tbody.querySelectorAll('tr:not(.empty-state-row)');
+    rows.forEach((row, index) => {
+      row.dataset.rowIndex = index;
+    });
   }
 
   // ---------- Events ----------
