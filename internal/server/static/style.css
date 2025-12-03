@@ -105,7 +105,20 @@ k8v-dropdown { position: relative; margin-top: 8px; display: block; }
 .search-clear:hover { background: rgba(244,67,54,0.2); border-color: rgba(244,67,54,0.4); color: #f44336; }
 
 /* Resource table */
-/* Table wrapper for horizontal scrolling */
+/* Resource table custom element (replaces wrapper) */
+resource-table {
+  display: block;
+  grid-column: 1 / -1;
+  width: 100%;
+  overflow-x: auto;
+  overflow-y: visible;
+  margin-bottom: 20px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid rgba(255,255,255,0.05);
+}
+
+/* Legacy wrapper class (kept for compatibility) */
 .resource-table-wrapper {
   grid-column: 1 / -1;
   width: 100%;
@@ -130,8 +143,9 @@ k8v-dropdown { position: relative; margin-top: 8px; display: block; }
   position: sticky;
   top: 0;
   z-index: 10;
-  background: rgba(20, 20, 30, 0.95);
+  background: rgba(15, 15, 20, 0.98);
   backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .resource-table thead th {
@@ -141,20 +155,22 @@ k8v-dropdown { position: relative; margin-top: 8px; display: block; }
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.5px;
-  color: #888;
-  border-bottom: 2px solid rgba(255,255,255,0.1);
+  color: rgba(255, 255, 255, 0.5);
+  border-bottom: none;
   white-space: nowrap;
   position: relative;
+  background: transparent;
 }
 
 .resource-table thead th.sortable {
   cursor: pointer;
   user-select: none;
+  transition: all 0.2s ease;
 }
 
 .resource-table thead th.sortable:hover {
-  color: #aaa;
-  background: rgba(255,255,255,0.03);
+  color: rgba(255, 255, 255, 0.7);
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .resource-table thead th.align-center { text-align: center; }
@@ -175,22 +191,22 @@ k8v-dropdown { position: relative; margin-top: 8px; display: block; }
 /* Row selection state */
 .resource-table tbody tr.selected {
   background: rgba(255,255,255,0.08);
-  border-left-color: #4CAF50;
+  border-left-color: rgba(196, 245, 97, 0.8); /* Theme highlight color */
 }
 
 .resource-table tbody tr.selected:hover {
   background: rgba(255,255,255,0.1);
 }
 
-/* Resource type color indicators for selected rows */
-.resource-table tbody tr.selected.pod { border-left-color: #4CAF50; }
-.resource-table tbody tr.selected.deployment { border-left-color: #2196F3; }
-.resource-table tbody tr.selected.service { border-left-color: #9C27B0; }
-.resource-table tbody tr.selected.ingress { border-left-color: #FF9800; }
-.resource-table tbody tr.selected.replicaset { border-left-color: #00BCD4; }
+/* Resource type color indicators for selected rows - subtle, theme-consistent colors */
+.resource-table tbody tr.selected.pod { border-left-color: rgba(76, 175, 80, 0.7); }
+.resource-table tbody tr.selected.deployment { border-left-color: rgba(100, 181, 246, 0.6); }
+.resource-table tbody tr.selected.service { border-left-color: rgba(186, 104, 200, 0.6); }
+.resource-table tbody tr.selected.ingress { border-left-color: rgba(255, 183, 77, 0.7); }
+.resource-table tbody tr.selected.replicaset { border-left-color: rgba(77, 208, 225, 0.6); }
 .resource-table tbody tr.selected.configmap,
-.resource-table tbody tr.selected.secret { border-left-color: #607D8B; }
-.resource-table tbody tr.selected.node { border-left-color: #795548; }
+.resource-table tbody tr.selected.secret { border-left-color: rgba(144, 164, 174, 0.6); }
+.resource-table tbody tr.selected.node { border-left-color: rgba(161, 136, 127, 0.6); }
 
 /* Table cells */
 .resource-table tbody td {
