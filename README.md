@@ -12,7 +12,7 @@ k8v is a **single-binary CLI tool** that connects to your Kubernetes cluster and
 
 ## 🎥 Demo
 
-![k8v Demo](demo.mp4)
+![k8v Demo](https://raw.githubusercontent.com/jianshen92/k8v/main/demo.mp4)
 
 ### Key Features
 
