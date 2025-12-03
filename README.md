@@ -11,8 +11,7 @@ A modern, real-time Kubernetes cluster visualization tool with a beautiful web U
 k8v is a **single-binary CLI tool** that connects to your Kubernetes cluster and provides a **modern web interface** for real-time cluster visualization. It's designed for developers who want the power of kubectl with the convenience of a visual interface.
 
 ## 🎥 Demo
-
-<video src="demo.mp4" controls></video>
+![demo](https://github.com/user-attachments/assets/cae0b55a-d208-44c8-b997-da440eb8df46)
 
 ### Key Features
 
