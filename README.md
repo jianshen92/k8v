@@ -10,20 +10,24 @@ A modern, real-time Kubernetes cluster visualization tool with a beautiful web U
 
 k8v is a **single-binary CLI tool** that connects to your Kubernetes cluster and provides a **modern web interface** for real-time cluster visualization. It's designed for developers who want the power of kubectl with the convenience of a visual interface.
 
+## 🎥 Demo
+
+![k8v Demo](demo.mp4)
+
 ### Key Features
 
-✅ **Vim-Like Command Mode** - Keyboard-first navigation with `:` command palette and kubectl-style aliases
-✅ **Real-time Updates** - Live streaming of cluster changes via WebSocket
-✅ **Resource Visualization** - View Pods, Deployments, Services, Ingress, ReplicaSets, ConfigMaps, Secrets
-✅ **Pod Logs Viewer** - Stream and view container logs in real-time with configurable modes (1-6 hotkeys)
-✅ **Search Functionality** - Quick search by resource name with keyboard shortcut (/)
-✅ **Multi-Context Support** - Switch between Kubernetes contexts with reactive state management
-✅ **Namespace Filtering** - Server-side filtering with searchable dropdown and keyboard navigation
-✅ **Relationship Mapping** - Click any resource to see bidirectional relationships
-✅ **Complete Keyboard Navigation** - `:`, `/`, `d`, `1-6`, `Esc` shortcuts for power users
-✅ **Scale Tested** - Handles 20,000+ resources smoothly
-✅ **Zero Dependencies** - Single binary with embedded web UI
-✅ **Production Ready** - Battle-tested with large production clusters
+- ✅ **Vim-Like Command Mode** - Keyboard-first navigation with `:` command palette and kubectl-style aliases
+- ✅ **Real-time Updates** - Live streaming of cluster changes via WebSocket
+- ✅ **Resource Visualization** - View Pods, Deployments, Services, Ingress, ReplicaSets, ConfigMaps, Secrets
+- ✅ **Pod Logs Viewer** - Stream and view container logs in real-time with configurable modes (1-6 hotkeys)
+- ✅ **Search Functionality** - Quick search by resource name with keyboard shortcut (/)
+- ✅ **Multi-Context Support** - Switch between Kubernetes contexts with reactive state management
+- ✅ **Namespace Filtering** - Server-side filtering with searchable dropdown and keyboard navigation
+- ✅ **Relationship Mapping** - Click any resource to see bidirectional relationships
+- ✅ **Complete Keyboard Navigation** - `:`, `/`, `d`, `1-6`, `Esc` shortcuts for power users
+- ✅ **Scale Tested** - Handles 20,000+ resources smoothly
+- ✅ **Zero Dependencies** - Single binary with embedded web UI
+- ✅ **Production Ready** - Battle-tested with large production clusters
 
 ## 🚀 Quick Start
 
