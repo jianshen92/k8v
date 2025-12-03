@@ -575,6 +575,18 @@ class App {
   setupSearchFilter() {
     document.getElementById('search-trigger').addEventListener('click', () => this.activateSearch());
     document.getElementById('search-input').addEventListener('input', (e) => this.handleSearchInput(e));
+    document.getElementById('search-input').addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        e.stopPropagation(); // Prevent global keydown handler from firing
+        // Blur the input to enable keyboard navigation
+        e.target.blur();
+        // Select the first row in the table
+        if (this.tableView) {
+          this.tableView.selectRow(0);
+        }
+      }
+    });
     document.getElementById('search-clear').addEventListener('click', () => this.clearSearch());
     document.addEventListener('keydown', (e) => this.handleGlobalKeydown(e));
   }
