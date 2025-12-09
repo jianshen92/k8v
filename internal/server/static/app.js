@@ -1,4 +1,4 @@
-import { API_PATHS, COMMANDS, EVENTS_LIMIT, LOCAL_STORAGE_KEYS, LOG_MODES, RELATIONSHIP_TYPES, RESOURCE_TYPES, findCommand, getCommandSuggestions, getColumnsForType } from './config.js';
+import { API_PATHS, COMMANDS, EVENTS_LIMIT, HOTKEYS, LOCAL_STORAGE_KEYS, LOG_MODES, RELATIONSHIP_TYPES, RESOURCE_TYPES, findCommand, getCommandSuggestions, getColumnsForType, matchesHotkey, getHotkeyDisplay } from './config.js';
 import { createInitialState, resetForNewConnection } from './state.js';
 import { createResourceSocket } from './ws.js';
 import './dropdown.js';
@@ -470,20 +470,27 @@ class App {
     );
 
     // Command mode activation - highest priority
-    if (event.key === ':' && !isInputFocused) {
+    if (matchesHotkey(event, 'command') && !isInputFocused) {
       event.preventDefault();
       this.activateCommandMode();
       return;
     }
 
-    if (event.key === '/' && !isInputFocused) {
+    if (matchesHotkey(event, 'search') && !isInputFocused) {
       event.preventDefault();
       this.activateSearch();
       return;
     }
 
+    // Hotkeys help modal
+    if (matchesHotkey(event, 'help') && !isInputFocused) {
+      event.preventDefault();
+      this.toggleHotkeysModal();
+      return;
+    }
+
     // Table row navigation
-    if (!isInputFocused && (event.key === 'ArrowUp' || event.key === 'k')) {
+    if (!isInputFocused && matchesHotkey(event, 'navUp')) {
       event.preventDefault();
       if (this.tableView) {
         this.tableView.navigateUp();
@@ -491,7 +498,7 @@ class App {
       return;
     }
 
-    if (!isInputFocused && (event.key === 'ArrowDown' || event.key === 'j')) {
+    if (!isInputFocused && matchesHotkey(event, 'navDown')) {
       event.preventDefault();
       if (this.tableView) {
         this.tableView.navigateDown();
@@ -500,7 +507,7 @@ class App {
     }
 
     // Enter to open selected row's detail panel
-    if (event.key === 'Enter' && !isInputFocused && this.state.ui.selectedRowIndex >= 0) {
+    if (matchesHotkey(event, 'select') && !isInputFocused && this.state.ui.selectedRowIndex >= 0) {
       event.preventDefault();
       if (this.tableView) {
         const resourceId = this.tableView.getSelectedResourceId();
@@ -511,7 +518,7 @@ class App {
       return;
     }
 
-    if (event.key === 'd' && !isInputFocused) {
+    if (matchesHotkey(event, 'debug') && !isInputFocused) {
       event.preventDefault();
       this.toggleDebugDrawer();
       return;
@@ -521,8 +528,8 @@ class App {
     if (!isInputFocused && this.state.ui.activeDetailTab === 'logs' && this.state.ui.detailResourceId) {
       const resource = this.getResourceById(this.state.ui.detailResourceId);
       if (resource && resource.type === 'Pod') {
-        // Find mode by hotkey
-        const mode = LOG_MODES.find(m => m.hotkey === event.key);
+        // Find mode by hotkeyId
+        const mode = LOG_MODES.find(m => matchesHotkey(event, m.hotkeyId));
         if (mode) {
           event.preventDefault();
           this.setLogMode(mode.id);
@@ -531,8 +538,15 @@ class App {
       }
     }
 
-    if (event.key === 'Escape') {
-      // Command mode - highest priority
+    if (matchesHotkey(event, 'escape')) {
+      // Hotkeys modal - highest priority
+      const hotkeysModal = document.getElementById('hotkeys-modal');
+      if (hotkeysModal && hotkeysModal.style.display !== 'none') {
+        this.toggleHotkeysModal();
+        return;
+      }
+
+      // Command mode
       if (this.state.command.active) {
         this.deactivateCommandMode();
         return;
@@ -661,6 +675,48 @@ class App {
     }
   }
 
+  // ---------- Hotkeys Modal ----------
+  toggleHotkeysModal() {
+    const modal = document.getElementById('hotkeys-modal');
+    if (modal.style.display === 'none') {
+      this.renderHotkeysModal();
+      modal.style.display = 'flex';
+    } else {
+      modal.style.display = 'none';
+    }
+  }
+
+  renderHotkeysModal() {
+    const content = document.getElementById('hotkeys-content');
+
+    // Group hotkeys by category from the HOTKEYS object
+    const categories = {};
+    for (const [id, hotkey] of Object.entries(HOTKEYS)) {
+      if (!categories[hotkey.category]) {
+        categories[hotkey.category] = [];
+      }
+      categories[hotkey.category].push({
+        key: hotkey.displayKey || hotkey.key,
+        description: hotkey.description,
+      });
+    }
+
+    // Render grouped hotkeys
+    content.innerHTML = Object.entries(categories).map(([category, hotkeys]) => `
+      <div class="hotkeys-category">
+        <div class="hotkeys-category-title">${category}</div>
+        <div class="hotkeys-list">
+          ${hotkeys.map(h => `
+            <div class="hotkey-item">
+              <span class="hotkey-key">${h.key}</span>
+              <span class="hotkey-description">${h.description}</span>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `).join('');
+  }
+
   renderDebugData() {
     const debugJson = document.getElementById('debug-json');
 
@@ -778,7 +834,8 @@ class App {
       const btn = document.createElement('button');
       btn.className = 'logs-mode-btn';
       btn.dataset.mode = mode.id;
-      btn.title = `Hotkey: ${mode.hotkey}`;
+      const hotkeyKey = getHotkeyDisplay(mode.hotkeyId);
+      btn.title = `Hotkey: ${hotkeyKey}`;
 
       // Set active if this is the current mode
       if (mode.id === this.state.log.mode) {
@@ -794,7 +851,7 @@ class App {
       // Hotkey indicator
       const hotkeySpan = document.createElement('span');
       hotkeySpan.className = 'mode-hotkey';
-      hotkeySpan.textContent = mode.hotkey;
+      hotkeySpan.textContent = hotkeyKey;
       btn.appendChild(hotkeySpan);
 
       // Click handler
@@ -910,8 +967,12 @@ class App {
 
   appendLogLine(line) {
     const logsContent = document.getElementById('logs-content');
+    // Only auto-scroll if user is already near the bottom (within 50px)
+    const isNearBottom = logsContent.scrollHeight - logsContent.scrollTop - logsContent.clientHeight < 50;
     logsContent.textContent += line;
-    logsContent.scrollTop = logsContent.scrollHeight;
+    if (isNearBottom) {
+      logsContent.scrollTop = logsContent.scrollHeight;
+    }
   }
 
   showLogError(errorMessage) {
@@ -1483,6 +1544,9 @@ class App {
     document.getElementById('debug-close').addEventListener('click', () => this.toggleDebugDrawer());
     document.getElementById('detail-close').addEventListener('click', () => this.closeDetail());
     document.getElementById('detail-fullscreen').addEventListener('click', () => this.toggleFullscreen());
+
+    // Hotkeys modal close handler (backdrop click or Esc key)
+    document.querySelector('#hotkeys-modal .hotkeys-backdrop').addEventListener('click', () => this.toggleHotkeysModal());
 
     document.querySelectorAll('.tab[data-tab]').forEach(tab => {
       tab.addEventListener('click', () => this.switchTab(tab.dataset.tab, tab));

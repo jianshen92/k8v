@@ -28,13 +28,48 @@ export const API_PATHS = {
   execWs: '/ws/exec',
 };
 
+// Single source of truth for all keyboard shortcuts
+// Other data structures reference hotkey IDs to get the actual key bindings
+export const HOTKEYS = {
+  // General
+  help:        { key: '?', description: 'Show keyboard shortcuts', category: 'General' },
+  command:     { key: ':', description: 'Open command mode', category: 'General' },
+  search:      { key: '/', description: 'Search by name', category: 'General' },
+  escape:      { key: 'Escape', displayKey: 'Esc', description: 'Close modal / panel / search', category: 'General' },
+  debug:       { key: 'd', description: 'Toggle debug drawer', category: 'General' },
+  // Navigation
+  navDown:     { key: 'j', altKey: 'ArrowDown', displayKey: 'j / ↓', description: 'Navigate down', category: 'Navigation' },
+  navUp:       { key: 'k', altKey: 'ArrowUp', displayKey: 'k / ↑', description: 'Navigate up', category: 'Navigation' },
+  select:      { key: 'Enter', description: 'Open selected resource', category: 'Navigation' },
+  // Logs
+  logHead:     { key: '1', description: 'Head (first 500 lines)', category: 'Logs' },
+  logTail:     { key: '2', description: 'Tail (follow last 100)', category: 'Logs' },
+  logLast5m:   { key: '3', description: 'Last 5 minutes', category: 'Logs' },
+  logLast15m:  { key: '4', description: 'Last 15 minutes', category: 'Logs' },
+  logLast500:  { key: '5', description: 'Last 500 lines', category: 'Logs' },
+  logLast1000: { key: '6', description: 'Last 1000 lines', category: 'Logs' },
+};
+
+// Helper to check if a key event matches a hotkey ID
+export function matchesHotkey(event, hotkeyId) {
+  const hotkey = HOTKEYS[hotkeyId];
+  if (!hotkey) return false;
+  return event.key === hotkey.key || event.key === hotkey.altKey;
+}
+
+// Get display key for UI (e.g., button labels)
+export function getHotkeyDisplay(hotkeyId) {
+  const hotkey = HOTKEYS[hotkeyId];
+  return hotkey?.displayKey || hotkey?.key || '';
+}
+
 export const LOG_MODES = [
-  { id: 'head', label: 'Head', hotkey: '1', headLines: 500, tailLines: null, sinceSeconds: null, follow: false },
-  { id: 'tail', label: 'Tail', hotkey: '2', headLines: null, tailLines: 100, sinceSeconds: null, follow: true },
-  { id: 'last-5m', label: '-5m', hotkey: '3', headLines: null, tailLines: null, sinceSeconds: 300, follow: true },
-  { id: 'last-15m', label: '-15m', hotkey: '4', headLines: null, tailLines: null, sinceSeconds: 900, follow: true },
-  { id: 'last-500', label: '-500', hotkey: '5', headLines: null, tailLines: 500, sinceSeconds: null, follow: true },
-  { id: 'last-1000', label: '-1000', hotkey: '6', headLines: null, tailLines: 1000, sinceSeconds: null, follow: true },
+  { id: 'head', label: 'Head', hotkeyId: 'logHead', headLines: 500, tailLines: null, sinceSeconds: null, follow: false },
+  { id: 'tail', label: 'Tail', hotkeyId: 'logTail', headLines: null, tailLines: 100, sinceSeconds: null, follow: true },
+  { id: 'last-5m', label: '-5m', hotkeyId: 'logLast5m', headLines: null, tailLines: null, sinceSeconds: 300, follow: true },
+  { id: 'last-15m', label: '-15m', hotkeyId: 'logLast15m', headLines: null, tailLines: null, sinceSeconds: 900, follow: true },
+  { id: 'last-500', label: '-500', hotkeyId: 'logLast500', headLines: null, tailLines: 500, sinceSeconds: null, follow: true },
+  { id: 'last-1000', label: '-1000', hotkeyId: 'logLast1000', headLines: null, tailLines: 1000, sinceSeconds: null, follow: true },
 ];
 
 export const COMMANDS = [
