@@ -920,6 +920,207 @@ class App {
     document.getElementById('logs-error-message').textContent = errorMessage;
   }
 
+  // ---------- Exec (Shell) ----------
+  initTerminal() {
+    // Dispose existing terminal if any
+    if (this.state.exec.terminalInstance) {
+      this.state.exec.terminalInstance.dispose();
+      this.state.exec.terminalInstance = null;
+    }
+    if (this.state.exec.fitAddon) {
+      this.state.exec.fitAddon = null;
+    }
+
+    const terminalContainer = document.getElementById('exec-terminal');
+    if (!terminalContainer) return null;
+
+    // Clear container
+    terminalContainer.innerHTML = '';
+
+    // Create terminal with custom theme matching k8v style
+    const terminal = new Terminal({
+      cursorBlink: true,
+      fontSize: 14,
+      fontFamily: "'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace",
+      theme: {
+        background: '#0a0a0a',
+        foreground: '#e0e0e0',
+        cursor: '#C4F561',
+        cursorAccent: '#0a0a0a',
+        selectionBackground: 'rgba(196, 245, 97, 0.3)',
+        black: '#000000',
+        red: '#ff6b6b',
+        green: '#4CAF50',
+        yellow: '#ffca28',
+        blue: '#42a5f5',
+        magenta: '#ab47bc',
+        cyan: '#26c6da',
+        white: '#e0e0e0',
+        brightBlack: '#666666',
+        brightRed: '#ff8a80',
+        brightGreen: '#69f0ae',
+        brightYellow: '#ffd54f',
+        brightBlue: '#82b1ff',
+        brightMagenta: '#ea80fc',
+        brightCyan: '#84ffff',
+        brightWhite: '#ffffff',
+      }
+    });
+
+    // Create and load fit addon
+    const fitAddon = new FitAddon.FitAddon();
+    terminal.loadAddon(fitAddon);
+
+    // Open terminal in container
+    terminal.open(terminalContainer);
+
+    // Fit to container
+    setTimeout(() => fitAddon.fit(), 0);
+
+    // Store references
+    this.state.exec.terminalInstance = terminal;
+    this.state.exec.fitAddon = fitAddon;
+
+    // Handle resize
+    const resizeObserver = new ResizeObserver(() => {
+      if (this.state.exec.fitAddon && this.state.exec.terminalInstance) {
+        this.state.exec.fitAddon.fit();
+        this.sendExecResize();
+      }
+    });
+    resizeObserver.observe(terminalContainer);
+
+    return terminal;
+  }
+
+  connectExec() {
+    const resource = this.getResourceById(this.state.ui.detailResourceId);
+    if (!resource || resource.type !== 'Pod') return;
+
+    const container = this.execContainerDropdown ? this.execContainerDropdown.getValue() : '';
+    if (!container) {
+      this.updateExecStatus('disconnected', 'Please select a container');
+      return;
+    }
+
+    // Close existing connection
+    this.disconnectExec();
+
+    // Initialize terminal if not exists
+    if (!this.state.exec.terminalInstance) {
+      this.initTerminal();
+    } else {
+      // Clear terminal
+      this.state.exec.terminalInstance.clear();
+    }
+
+    this.updateExecStatus('connecting', 'Connecting...');
+
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const params = new URLSearchParams({
+      namespace: resource.namespace,
+      pod: resource.name,
+      container: container,
+    });
+
+    const wsUrl = `${wsProtocol}//${window.location.host}${API_PATHS.execWs}?${params.toString()}`;
+
+    this.state.exec.socket = new WebSocket(wsUrl);
+    this.state.exec.container = container;
+
+    this.state.exec.socket.onopen = () => {
+      console.log('[ExecStream] Connected:', `${resource.namespace}/${resource.name}/${container}`);
+      // Send initial resize
+      setTimeout(() => this.sendExecResize(), 100);
+    };
+
+    this.state.exec.socket.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      this.handleExecMessage(message);
+    };
+
+    this.state.exec.socket.onerror = (error) => {
+      console.error('[ExecStream] WebSocket error:', error);
+      this.updateExecStatus('error', 'Connection error');
+    };
+
+    this.state.exec.socket.onclose = () => {
+      console.log('[ExecStream] Disconnected');
+      this.state.exec.connected = false;
+      this.updateExecStatus('disconnected', 'Disconnected');
+    };
+
+    // Set up terminal input handler
+    if (this.state.exec.terminalInstance) {
+      this.state.exec.terminalInstance.onData((data) => {
+        this.sendExecInput(data);
+      });
+    }
+  }
+
+  handleExecMessage(message) {
+    switch (message.type) {
+      case 'CONNECTED':
+        this.state.exec.connected = true;
+        this.updateExecStatus('connected', `Shell: ${message.data}`);
+        this.state.exec.terminalInstance?.focus();
+        break;
+      case 'OUTPUT':
+        this.state.exec.terminalInstance?.write(message.data);
+        break;
+      case 'ERROR':
+        this.updateExecStatus('error', message.data);
+        this.state.exec.terminalInstance?.writeln(`\r\n\x1b[31mError: ${message.data}\x1b[0m`);
+        break;
+      case 'CLOSE':
+        this.state.exec.connected = false;
+        this.updateExecStatus('disconnected', message.data || 'Session ended');
+        break;
+    }
+  }
+
+  sendExecInput(data) {
+    if (this.state.exec.socket && this.state.exec.socket.readyState === WebSocket.OPEN) {
+      this.state.exec.socket.send(JSON.stringify({
+        type: 'INPUT',
+        data: data,
+      }));
+    }
+  }
+
+  sendExecResize() {
+    if (this.state.exec.socket && this.state.exec.socket.readyState === WebSocket.OPEN && this.state.exec.terminalInstance) {
+      const { cols, rows } = this.state.exec.terminalInstance;
+      this.state.exec.socket.send(JSON.stringify({
+        type: 'RESIZE',
+        cols: cols,
+        rows: rows,
+      }));
+    }
+  }
+
+  disconnectExec() {
+    if (this.state.exec.socket) {
+      this.state.exec.socket.close();
+      this.state.exec.socket = null;
+    }
+    this.state.exec.connected = false;
+    this.state.exec.container = '';
+  }
+
+  updateExecStatus(status, text) {
+    const statusEl = document.getElementById('exec-status');
+    const iconEl = statusEl?.querySelector('.exec-status-icon');
+    const textEl = statusEl?.querySelector('.exec-status-text');
+
+    if (statusEl) {
+      statusEl.className = 'exec-status ' + status;
+    }
+    if (textEl) {
+      textEl.textContent = text;
+    }
+  }
+
   async showResource(resourceId) {
     let resource = this.getResourceById(resourceId);
 
@@ -989,40 +1190,63 @@ class App {
     document.getElementById('yaml-content').textContent = resource.yaml || 'No YAML available';
 
     const logsTabButton = document.getElementById('logs-tab-button');
+    const execTabButton = document.getElementById('exec-tab-button');
     if (resource.type === 'Pod') {
       logsTabButton.style.display = 'flex';
+      execTabButton.style.display = 'flex';
       const containers = resource.spec?.containers || [];
       const containerSelector = document.getElementById('container-selector');
+      const execContainerSelector = document.getElementById('exec-container-selector');
+
+      // Set up container options for both logs and exec dropdowns
       if (this.containerDropdown) {
         const options = containers.map(c => ({ value: c.name, label: c.name }));
         this.containerDropdown.setOptions(options, '');
       }
+      if (this.execContainerDropdown) {
+        const options = containers.map(c => ({ value: c.name, label: c.name }));
+        this.execContainerDropdown.setOptions(options, '');
+      }
+
       if (containers.length === 1) {
         this.currentContainerCount = 1;
         this.currentSingleContainerValue = containers[0].name;
         if (this.containerDropdown) this.containerDropdown.setValue(containers[0].name);
+        if (this.execContainerDropdown) this.execContainerDropdown.setValue(containers[0].name);
         containerSelector.style.display = 'none';
+        execContainerSelector.style.display = 'none';
       } else if (containers.length > 1) {
         this.currentContainerCount = containers.length;
         this.currentSingleContainerValue = '';
         containerSelector.style.display = 'flex';
+        execContainerSelector.style.display = 'flex';
         // Auto-select the first container to save user a click
         if (this.containerDropdown) this.containerDropdown.setValue(containers[0].name);
+        if (this.execContainerDropdown) this.execContainerDropdown.setValue(containers[0].name);
         // Auto-load logs if currently on logs tab
         if (this.state.ui.activeDetailTab === 'logs') {
           this.loadLogs();
         }
+        // Auto-connect exec if currently on exec tab
+        if (this.state.ui.activeDetailTab === 'exec') {
+          this.connectExec();
+        }
       } else {
         logsTabButton.style.display = 'none';
+        execTabButton.style.display = 'none';
         this.currentContainerCount = 0;
         this.currentSingleContainerValue = '';
       }
     } else {
-      logsTabButton.style.display = 'none';
-      document.getElementById('container-selector').style.display = 'none';
+      if (logsTabButton) logsTabButton.style.display = 'none';
+      if (execTabButton) execTabButton.style.display = 'none';
+      const containerSelector = document.getElementById('container-selector');
+      const execContainerSelector = document.getElementById('exec-container-selector');
+      if (containerSelector) containerSelector.style.display = 'none';
+      if (execContainerSelector) execContainerSelector.style.display = 'none';
       this.currentContainerCount = 0;
       this.currentSingleContainerValue = '';
-      if (this.state.ui.activeDetailTab === 'logs') {
+      if (this.state.ui.activeDetailTab === 'logs' || this.state.ui.activeDetailTab === 'exec') {
         const overviewTab = document.querySelector('.tab[data-tab="overview"]');
         if (overviewTab) this.switchTab('overview', overviewTab);
       }
@@ -1038,6 +1262,15 @@ class App {
       this.state.log.socket = null;
     }
     this.state.log.currentKey = null;
+
+    // Clean up exec session
+    this.disconnectExec();
+    if (this.state.exec.terminalInstance) {
+      this.state.exec.terminalInstance.dispose();
+      this.state.exec.terminalInstance = null;
+      this.state.exec.fitAddon = null;
+    }
+
     this.state.ui.detailResourceId = null;
     this.state.ui.detailFullscreen = false;
     document.getElementById('detail-panel').classList.remove('visible');
@@ -1080,13 +1313,44 @@ class App {
       if (this.containerDropdown && this.containerDropdown.getValue()) {
         this.loadLogs();
       }
-    } else {
-      document.getElementById('container-selector').style.display = 'none';
+
+      // Disconnect exec when switching to logs
+      this.disconnectExec();
+    } else if (tabName === 'exec') {
+      const execContainerSelector = document.getElementById('exec-container-selector');
+      const shouldShowSelector = this.currentContainerCount > 1;
+      execContainerSelector.style.display = shouldShowSelector ? 'flex' : 'none';
+
+      if (this.currentContainerCount === 1 && this.currentSingleContainerValue && this.execContainerDropdown) {
+        this.execContainerDropdown.setValue(this.currentSingleContainerValue);
+      }
+
+      // Initialize terminal and connect
+      if (this.execContainerDropdown && this.execContainerDropdown.getValue()) {
+        this.connectExec();
+      }
+
+      // Disconnect logs when switching to exec
       if (this.state.log.socket) {
         this.state.log.socket.close();
         this.state.log.socket = null;
       }
       this.state.log.currentKey = null;
+    } else {
+      const containerSelector = document.getElementById('container-selector');
+      const execContainerSelector = document.getElementById('exec-container-selector');
+      if (containerSelector) containerSelector.style.display = 'none';
+      if (execContainerSelector) execContainerSelector.style.display = 'none';
+
+      // Disconnect logs
+      if (this.state.log.socket) {
+        this.state.log.socket.close();
+        this.state.log.socket = null;
+      }
+      this.state.log.currentKey = null;
+
+      // Disconnect exec
+      this.disconnectExec();
     }
   }
 
@@ -1230,6 +1494,17 @@ class App {
       this.containerDropdown.addEventListener('change', () => {
         if (this.state.ui.activeDetailTab === 'logs') {
           this.loadLogs();
+        }
+      });
+    }
+
+    // Exec container dropdown
+    this.execContainerDropdown = document.getElementById('exec-container-dropdown');
+    if (this.execContainerDropdown) {
+      this.execContainerDropdown.setAttribute('searchable', 'true');
+      this.execContainerDropdown.addEventListener('change', () => {
+        if (this.state.ui.activeDetailTab === 'exec') {
+          this.connectExec();
         }
       });
     }

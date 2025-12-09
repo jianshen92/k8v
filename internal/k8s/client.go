@@ -22,6 +22,7 @@ type Logger interface {
 type Client struct {
 	Clientset       *kubernetes.Clientset
 	InformerFactory informers.SharedInformerFactory
+	config          *rest.Config
 	logger          Logger
 }
 
@@ -49,6 +50,7 @@ func NewClientWithContext(context string) (*Client, error) {
 	return &Client{
 		Clientset:       clientset,
 		InformerFactory: informerFactory,
+		config:          config,
 	}, nil
 }
 

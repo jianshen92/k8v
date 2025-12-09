@@ -25,6 +25,7 @@ export const API_PATHS = {
   resource: '/api/resource',
   resourcesWs: '/ws',
   logsWs: '/ws/logs',
+  execWs: '/ws/exec',
 };
 
 export const LOG_MODES = [

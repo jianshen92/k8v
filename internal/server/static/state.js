@@ -34,6 +34,13 @@ export function createInitialState() {
       currentKey: null,
       mode: 'tail',
     },
+    exec: {
+      socket: null,
+      connected: false,
+      container: '',
+      terminalInstance: null,
+      fitAddon: null,
+    },
     sync: {
       syncing: false,
       synced: false,

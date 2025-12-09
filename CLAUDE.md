@@ -12,16 +12,17 @@
 - Real-time cluster visualization via WebSocket streaming
 - Bidirectional resource relationship navigation
 - Pod logs viewer with 6 modes (Head, Tail, Last 5m/15m/500/1000)
+- **Pod shell/exec** - Interactive terminal access to pods via xterm.js
 - Vim-like command mode (`:` palette with kubectl aliases)
 - Namespace/context switching without restart
 - Complete keyboard navigation (`:`, `/`, `d`, `1-6`, `Esc`)
 - Search by name (`/`)
 - Server-side filtering (40-100x network reduction)
 
-**Current State:** ✅ Phase 3 Nearly Complete
+**Current State:** ✅ Phase 3 Complete
 - Production Go backend (Informers, WebSocket, relationships)
 - Polished ES6 frontend (7 modules: app, config, state, ws, dropdown, style, index.html)
-- Single 62MB binary ready to use
+- Single 66MB binary ready to use (includes embedded xterm.js)
 - Tested with 21,000+ resources in production clusters
 
 **Next:** Enhanced YAML view, virtual scrolling, additional resource types
@@ -117,6 +118,7 @@ type Relationships struct {
 | Live Streaming | ✅ Complete |
 | Relationship Mapping | ✅ Complete |
 | Pod Logs Viewing | ✅ Complete |
+| Pod Shell/Exec | ✅ Complete |
 | Search Functionality | ✅ Complete |
 | Multi-Context Support | ✅ Complete |
 | Namespace Filtering | ✅ Complete |
@@ -187,10 +189,10 @@ See `HOTKEYS.md` for full documentation.
 
 | Aspect | Details |
 |--------|---------|
-| **Current Stage** | ✅ Phase 3 Nearly Complete |
-| **Tech Stack** | Go + ES6 modules |
+| **Current Stage** | ✅ Phase 3 Complete |
+| **Tech Stack** | Go + ES6 modules + xterm.js |
 | **Communication** | WebSocket |
-| **Deployment** | Single 62MB binary |
+| **Deployment** | Single 66MB binary |
 | **Binary** | `./k8v` |
 | **Resources** | Pod, Deployment, ReplicaSet, Service, Ingress, ConfigMap, Secret, Node |
 | **Scale Tested** | 21,867 resources |
@@ -198,4 +200,4 @@ See `HOTKEYS.md` for full documentation.
 
 ---
 
-**Last Updated:** 2025-12-02 - Vim-like command mode implemented. k8v is now a complete keyboard-first power tool.
+**Last Updated:** 2025-12-05 - Pod shell/exec implemented. Interactive terminal access to pods via embedded xterm.js with auto shell detection (bash/sh) and bidirectional WebSocket streaming.

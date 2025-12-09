@@ -34,6 +34,9 @@ func main() {
 	logHub := server.NewLogHub(logger)
 	go logHub.Run()
 
+	execHub := server.NewExecHub(logger)
+	go execHub.Run()
+
 	// Create and start app with current context
 	currentContext, err := k8s.GetCurrentContext()
 	if err != nil {
@@ -46,7 +49,7 @@ func main() {
 	}
 
 	// Create and start HTTP server
-	srv, err := server.NewServerWithProvider(*port, k8vApp, hub, logHub)
+	srv, err := server.NewServerWithProvider(*port, k8vApp, hub, logHub, execHub)
 	if err != nil {
 		log.Fatalf("Failed to create server: %v", err)
 	}

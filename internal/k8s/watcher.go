@@ -58,6 +58,11 @@ func NewWatcher(client *Client, resourceCache *ResourceCache, handler EventHandl
 	}
 }
 
+// GetClient returns the Kubernetes client
+func (w *Watcher) GetClient() *Client {
+	return w.client
+}
+
 // Start registers all informer event handlers and starts watching
 func (w *Watcher) Start() error {
 	// Register Pod handlers
