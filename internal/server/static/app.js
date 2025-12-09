@@ -524,6 +524,42 @@ class App {
       return;
     }
 
+    // Detail panel hotkeys (only when panel is visible)
+    const detailPanel = document.getElementById('detail-panel');
+    if (detailPanel && detailPanel.classList.contains('visible') && !isInputFocused) {
+      if (matchesHotkey(event, 'fullscreen')) {
+        event.preventDefault();
+        this.toggleFullscreen();
+        return;
+      }
+      if (matchesHotkey(event, 'tabOverview')) {
+        event.preventDefault();
+        this.switchTab('overview', document.querySelector('.tab[data-tab="overview"]'));
+        return;
+      }
+      if (matchesHotkey(event, 'tabYaml')) {
+        event.preventDefault();
+        this.switchTab('yaml', document.querySelector('.tab[data-tab="yaml"]'));
+        return;
+      }
+      if (matchesHotkey(event, 'tabLogs')) {
+        event.preventDefault();
+        const logsTab = document.getElementById('logs-tab-button');
+        if (logsTab && logsTab.style.display !== 'none') {
+          this.switchTab('logs', logsTab);
+        }
+        return;
+      }
+      if (matchesHotkey(event, 'tabShell')) {
+        event.preventDefault();
+        const execTab = document.getElementById('exec-tab-button');
+        if (execTab && execTab.style.display !== 'none') {
+          this.switchTab('exec', execTab);
+        }
+        return;
+      }
+    }
+
     // Log mode hotkeys - dynamically generated from LOG_MODES data
     if (!isInputFocused && this.state.ui.activeDetailTab === 'logs' && this.state.ui.detailResourceId) {
       const resource = this.getResourceById(this.state.ui.detailResourceId);

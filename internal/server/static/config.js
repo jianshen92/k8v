@@ -41,6 +41,12 @@ export const HOTKEYS = {
   navDown:     { key: 'j', altKey: 'ArrowDown', displayKey: 'j / ↓', description: 'Navigate down', category: 'Navigation' },
   navUp:       { key: 'k', altKey: 'ArrowUp', displayKey: 'k / ↑', description: 'Navigate up', category: 'Navigation' },
   select:      { key: 'Enter', description: 'Open selected resource', category: 'Navigation' },
+  // Detail Panel
+  fullscreen:   { key: '`', description: 'Toggle fullscreen detail panel', category: 'Detail Panel' },
+  tabOverview:  { key: 'o', description: 'Switch to Overview tab', category: 'Detail Panel' },
+  tabYaml:      { key: 'y', description: 'Switch to YAML tab', category: 'Detail Panel' },
+  tabLogs:      { key: 'l', description: 'Switch to Logs tab', category: 'Detail Panel' },
+  tabShell:     { key: 's', description: 'Switch to Shell tab', category: 'Detail Panel' },
   // Logs
   logHead:     { key: '1', description: 'Head (first 500 lines)', category: 'Logs' },
   logTail:     { key: '2', description: 'Tail (follow last 100)', category: 'Logs' },
