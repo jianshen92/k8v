@@ -33,13 +33,15 @@ k8v is a **single-binary CLI tool** that connects to your Kubernetes cluster and
 ### Installation
 
 ```bash
-# Download the binary
-git clone https://github.com/user/k8v.git
-cd k8v
-go build -o k8v cmd/k8v/main.go
+# Install latest release (auditable install script)
+curl -fsSL https://raw.githubusercontent.com/user/k8v/main/scripts/install.sh | bash
 
-# Make it executable
-chmod +x k8v
+# Or install a specific tag
+curl -fsSL https://raw.githubusercontent.com/user/k8v/main/scripts/install.sh | VERSION=v0.1.0 bash
+
+# Manual download (replace OS/ARCH)
+curl -L https://github.com/user/k8v/releases/download/v0.1.0/k8v-linux-amd64 -o k8v
+chmod +x k8v && sudo mv k8v /usr/local/bin/
 ```
 
 ### Usage
