@@ -42,6 +42,9 @@ curl -fsSL https://raw.githubusercontent.com/user/k8v/main/scripts/install.sh | 
 # Manual download (replace OS/ARCH)
 curl -L https://github.com/user/k8v/releases/download/v0.1.0/k8v-linux-amd64 -o k8v
 chmod +x k8v && sudo mv k8v /usr/local/bin/
+
+# Verify install
+k8v --version
 ```
 
 ### Usage

@@ -13,10 +13,19 @@ import (
 	"github.com/user/k8v/internal/server"
 )
 
+// Version is set at build time via -ldflags.
+var Version = "dev"
+
 func main() {
 	// Parse flags
 	port := flag.Int("port", 8080, "HTTP server port")
+	versionFlag := flag.Bool("version", false, "Print version and exit")
 	flag.Parse()
+
+	if *versionFlag {
+		fmt.Println(Version)
+		return
+	}
 
 	log.Println("Starting k8v - Kubernetes Visualizer")
 

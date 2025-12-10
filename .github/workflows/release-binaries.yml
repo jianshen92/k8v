@@ -45,7 +45,8 @@ jobs:
         run: |
           mkdir -p dist
           outfile="k8v-${{ matrix.os }}-${{ matrix.arch }}${{ matrix.ext }}"
-          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -trimpath -o "dist/${outfile}" ./cmd/k8v
+          version="${GITHUB_REF_NAME}"
+          GOOS=${{ matrix.os }} GOARCH=${{ matrix.arch }} go build -trimpath -ldflags "-X main.Version=${version}" -o "dist/${outfile}" ./cmd/k8v
           echo "asset=dist/${outfile}" >> "$GITHUB_OUTPUT"
 
       - name: Publish release asset
