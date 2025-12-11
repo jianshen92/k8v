@@ -129,6 +129,9 @@ func (w *Watcher) Start() error {
 		DeleteFunc: w.handleNodeDelete,
 	})
 
+	// Register CustomResource handlers (CRDs)
+	w.registerCustomResourceInformers(context.Background())
+
 	log.Println("All informer handlers registered")
 	return nil
 }

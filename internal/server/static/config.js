@@ -95,18 +95,33 @@ export const COMMANDS = [
   { id: 'cluster', type: 'action', label: 'cluster', aliases: [], action: 'openContextDropdown', description: 'Open context selector' },
 ];
 
-export function findCommand(input) {
+export function buildCommands(extraResourceTypes = []) {
+  const extras = extraResourceTypes.map(t => {
+    const slug = t.toLowerCase();
+    return {
+      id: slug,
+      type: 'resource',
+      label: t,
+      aliases: [slug],
+      target: t,
+      description: `Switch to ${t}`,
+    };
+  });
+  return [...COMMANDS, ...extras];
+}
+
+export function findCommand(input, commands = COMMANDS) {
   const normalized = input.toLowerCase().trim();
-  return COMMANDS.find(cmd =>
+  return commands.find(cmd =>
     cmd.label.toLowerCase() === normalized ||
     cmd.aliases.some(alias => alias === normalized)
   );
 }
 
-export function getCommandSuggestions(input) {
-  if (!input) return COMMANDS;
+export function getCommandSuggestions(input, commands = COMMANDS) {
+  if (!input) return commands;
   const normalized = input.toLowerCase().trim();
-  return COMMANDS.filter(cmd =>
+  return commands.filter(cmd =>
     cmd.label.toLowerCase().startsWith(normalized) ||
     cmd.aliases.some(alias => alias.startsWith(normalized))
   );
@@ -180,6 +195,14 @@ export const TABLE_COLUMNS = {
   ],
 };
 
+const DEFAULT_COLUMNS = [
+  { id: 'name', label: 'NAME', width: '240px', align: 'left', sortable: true },
+  { id: 'type', label: 'TYPE', width: '180px', align: 'left', sortable: false },
+  { id: 'status', label: 'STATUS', width: '140px', align: 'left', sortable: false },
+  { id: 'age', label: 'AGE', width: '80px', align: 'right', sortable: false },
+  { id: 'namespace', label: 'NAMESPACE', width: '140px', align: 'left', sortable: false },
+];
+
 export function getColumnsForType(resourceType) {
-  return TABLE_COLUMNS[resourceType] || [];
+  return TABLE_COLUMNS[resourceType] || DEFAULT_COLUMNS;
 }

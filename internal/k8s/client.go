@@ -6,6 +6,8 @@ import (
 	"path/filepath"
 	"time"
 
+	"k8s.io/client-go/dynamic"
+	"k8s.io/client-go/dynamic/dynamicinformer"
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -20,10 +22,12 @@ type Logger interface {
 
 // Client wraps the Kubernetes clientset and informer factory
 type Client struct {
-	Clientset       *kubernetes.Clientset
-	InformerFactory informers.SharedInformerFactory
-	config          *rest.Config
-	logger          Logger
+	Clientset              *kubernetes.Clientset
+	InformerFactory        informers.SharedInformerFactory
+	DynamicClient          dynamic.Interface
+	DynamicInformerFactory dynamicinformer.DynamicSharedInformerFactory
+	config                 *rest.Config
+	logger                 Logger
 }
 
 // NewClient creates a new Kubernetes client with informers using the current context
@@ -44,13 +48,21 @@ func NewClientWithContext(context string) (*Client, error) {
 		return nil, fmt.Errorf("failed to create clientset: %w", err)
 	}
 
+	dynamicClient, err := dynamic.NewForConfig(config)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create dynamic client: %w", err)
+	}
+
 	// Create SharedInformerFactory with 30 second resync period
 	informerFactory := informers.NewSharedInformerFactory(clientset, 30*time.Second)
+	dynamicFactory := dynamicinformer.NewDynamicSharedInformerFactory(dynamicClient, 30*time.Second)
 
 	return &Client{
-		Clientset:       clientset,
-		InformerFactory: informerFactory,
-		config:          config,
+		Clientset:              clientset,
+		InformerFactory:        informerFactory,
+		DynamicClient:          dynamicClient,
+		DynamicInformerFactory: dynamicFactory,
+		config:                 config,
 	}, nil
 }
 
@@ -152,6 +164,9 @@ func (c *Client) SetLogger(logger Logger) {
 // Start starts all informers
 func (c *Client) Start(stopCh <-chan struct{}) {
 	c.InformerFactory.Start(stopCh)
+	if c.DynamicInformerFactory != nil {
+		c.DynamicInformerFactory.Start(stopCh)
+	}
 }
 
 // logf logs using the logger if available, otherwise falls back to fmt.Printf
@@ -230,8 +245,16 @@ func (c *Client) WaitForCacheSync(stopCh <-chan struct{}) bool {
 			if allSynced {
 				totalTime := time.Since(syncStart)
 				c.logf("All informers synced successfully in %v", totalTime.Round(time.Millisecond))
-				return true
+				goto dynamicSync
 			}
 		}
 	}
+
+dynamicSync:
+	if c.DynamicInformerFactory != nil {
+		c.logf("Waiting for dynamic informer caches to sync...")
+		c.DynamicInformerFactory.WaitForCacheSync(stopCh)
+	}
+
+	return true
 }

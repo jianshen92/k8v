@@ -9,6 +9,8 @@ function extractCellValue(resource, columnId) {
       return resource.name;
     case 'namespace':
       return resource.namespace || '-';
+    case 'type':
+      return resource.type || '-';
     case 'age':
       return formatAge(resource.createdAt);
     case 'status':
@@ -420,7 +422,7 @@ class ResourceTable extends HTMLElement {
       }));
     });
 
-    const columns = getColumnsForType(resource.type);
+    const columns = getColumnsForType(this.filters.type);
 
     columns.forEach(column => {
       const td = document.createElement('td');
@@ -459,9 +461,13 @@ class ResourceTable extends HTMLElement {
     const td = document.createElement('td');
     td.colSpan = getColumnsForType(this.filters.type).length;
 
+    const resourceLabel = (() => {
+      if (!this.filters.type) return 'resources';
+      return this.filters.type.endsWith('s') ? this.filters.type : `${this.filters.type}s`;
+    })();
     const emptyMessage = this.filters.search
-      ? `No ${this.filters.type}s matching "${this.filters.search}"`
-      : `No ${this.filters.type}s found`;
+      ? `No ${resourceLabel} matching "${this.filters.search}"`
+      : `No ${resourceLabel} found`;
     const emptyDetail = this.filters.namespace !== 'all'
       ? `in namespace "${this.filters.namespace}"`
       : 'in cluster';
@@ -490,7 +496,8 @@ class ResourceTable extends HTMLElement {
   getFilteredList() {
     return Array.from(this.resources.values())
       .filter(r => {
-        if (r.type !== this.filters.type) return false;
+        const matchesType = r.type === this.filters.type;
+        if (!matchesType) return false;
         if (this.filters.search && !r.name.toLowerCase().includes(this.filters.search)) {
           return false;
         }

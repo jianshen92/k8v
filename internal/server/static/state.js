@@ -1,4 +1,4 @@
-import { LOCAL_STORAGE_KEYS } from './config.js';
+import { LOCAL_STORAGE_KEYS, RESOURCE_TYPES } from './config.js';
 
 export function createInitialState() {
   return {
@@ -8,6 +8,7 @@ export function createInitialState() {
     snapshotCount: 0,
     namespaces: [],
     highlightedNamespaceIndex: -1,
+    resourceTypes: RESOURCE_TYPES.slice(),
     filters: {
       type: 'Pod',
       namespace: localStorage.getItem(LOCAL_STORAGE_KEYS.namespace) || 'all',

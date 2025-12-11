@@ -1,4 +1,4 @@
-import { API_PATHS, COMMANDS, EVENTS_LIMIT, HOTKEYS, LOCAL_STORAGE_KEYS, LOG_MODES, RELATIONSHIP_TYPES, RESOURCE_TYPES, findCommand, getCommandSuggestions, getColumnsForType, matchesHotkey, getHotkeyDisplay } from './config.js';
+import { API_PATHS, EVENTS_LIMIT, HOTKEYS, LOCAL_STORAGE_KEYS, LOG_MODES, RELATIONSHIP_TYPES, RESOURCE_TYPES, buildCommands, findCommand, getCommandSuggestions, getColumnsForType, matchesHotkey, getHotkeyDisplay } from './config.js';
 import { createInitialState, resetForNewConnection } from './state.js';
 import { createResourceSocket } from './ws.js';
 import './dropdown.js';
@@ -11,6 +11,8 @@ class App {
     this.currentContainerCount = 0;
     this.currentSingleContainerValue = '';
     this.tableView = null;
+    this.lastCustomResourceType = '';
+    this.commands = buildCommands();
 
     this.wsManager = createResourceSocket(this.state, {
       buildUrl: this.buildWsUrl.bind(this),
@@ -96,7 +98,7 @@ class App {
     const params = [];
     const { namespace, type } = this.state.filters;
     if (namespace !== 'all') params.push(`namespace=${namespace}`);
-    if (type !== 'all') params.push(`type=${type}`);
+    if (type) params.push(`type=${type}`);
     const queryString = params.length ? `?${params.join('&')}` : '';
     return `${API_PATHS.resourcesWs}${queryString}`;
   }
@@ -170,10 +172,31 @@ class App {
       btn.addEventListener('click', () => this.setFilter(t));
       container.appendChild(btn);
     }
+
+    const customTypes = this.getCustomResourceTypes();
+    if (customTypes.length > 0) {
+      const isActiveCustom = customTypes.includes(this.state.filters.type);
+      const label = isActiveCustom ? `CustomResource (${this.state.filters.type})` : 'CustomResource';
+      const btn = document.createElement('button');
+      btn.className = 'filter-btn' + (isActiveCustom ? ' active' : '');
+      btn.textContent = label;
+      btn.addEventListener('click', () => {
+        const currentIndex = customTypes.indexOf(this.state.filters.type);
+        const nextIndex = currentIndex >= 0 ? (currentIndex + 1) % customTypes.length : 0;
+        const nextType = customTypes[nextIndex];
+        this.lastCustomResourceType = nextType;
+        this.setFilter(nextType);
+      });
+      container.appendChild(btn);
+    }
   }
 
   setFilter(type) {
     this.state.filters.type = type;
+    const customTypes = this.getCustomResourceTypes();
+    if (customTypes.includes(type)) {
+      this.lastCustomResourceType = type;
+    }
     this.reconnectWithFilter();
   }
 
@@ -239,7 +262,7 @@ class App {
     this.state.command.active = true;
     this.state.command.input = '';
     this.state.command.highlightedIndex = -1;
-    this.state.command.suggestions = COMMANDS.slice(); // All commands initially
+    this.state.command.suggestions = this.commands.slice(); // All commands initially
 
     const overlay = document.getElementById('command-mode-overlay');
     overlay.style.display = 'flex';
@@ -264,7 +287,7 @@ class App {
   handleCommandInput(event) {
     this.state.command.input = event.target.value;
     this.state.command.highlightedIndex = -1;
-    this.state.command.suggestions = getCommandSuggestions(this.state.command.input);
+    this.state.command.suggestions = getCommandSuggestions(this.state.command.input, this.commands);
     this.renderCommandSuggestions();
   }
 
@@ -399,7 +422,7 @@ class App {
         const input = document.getElementById('command-input');
         input.value = cmd.label;
         this.state.command.input = cmd.label;
-        this.state.command.suggestions = getCommandSuggestions(cmd.label);
+        this.state.command.suggestions = getCommandSuggestions(cmd.label, this.commands);
         this.renderCommandSuggestions();
       } else if (suggestions.length === 1) {
         // Auto-complete with only suggestion
@@ -422,7 +445,7 @@ class App {
       }
 
       // Execute first matching command if input exactly matches
-      const exactMatch = findCommand(this.state.command.input);
+      const exactMatch = findCommand(this.state.command.input, this.commands);
       if (exactMatch) {
         this.executeCommand(exactMatch);
         return;
@@ -659,6 +682,9 @@ class App {
       document.getElementById('stat-node').textContent = counts['Node'] || 0;
       document.getElementById('resource-count').textContent = `${counts.total || 0} resources`;
 
+      this.updateResourceTypes(counts);
+      this.renderFilters();
+
       console.log('[Stats] Loaded counts:', counts);
     } catch (error) {
       console.error('[Stats] Failed to fetch stats:', error);
@@ -684,6 +710,34 @@ class App {
       console.error('Error fetching resource:', error);
       throw error;
     }
+  }
+
+  updateResourceTypes(counts) {
+    const base = RESOURCE_TYPES.slice();
+    const incoming = Object.keys(counts || {}).filter(k => k !== 'total');
+    const extras = incoming.filter(t => !base.includes(t)).sort();
+    const merged = [...base, ...extras];
+
+    this.state.resourceTypes = merged;
+
+    if (!merged.includes(this.state.filters.type)) {
+      const customTypes = this.getCustomResourceTypes();
+      const fallback = customTypes.includes(this.lastCustomResourceType) ? this.lastCustomResourceType : 'Pod';
+      this.state.filters.type = fallback;
+      this.refreshTableView();
+    }
+
+    const customTypes = this.getCustomResourceTypes();
+    this.commands = buildCommands(customTypes);
+    if (this.state.command.active) {
+      this.state.command.suggestions = getCommandSuggestions(this.state.command.input, this.commands);
+      this.renderCommandSuggestions();
+    }
+  }
+
+  getCustomResourceTypes() {
+    const base = new Set(RESOURCE_TYPES);
+    return this.state.resourceTypes.filter(t => !base.has(t));
   }
 
   // ---------- Events ----------
