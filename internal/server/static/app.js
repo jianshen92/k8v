@@ -931,6 +931,8 @@ class App {
       return;
     }
 
+    // Clear currentKey first to prevent onclose handler from appending "[Connection closed]"
+    this.state.log.currentKey = null;
     if (this.state.log.socket) {
       this.state.log.socket.close();
       this.state.log.socket = null;
@@ -1112,13 +1114,8 @@ class App {
     // Close existing connection
     this.disconnectExec();
 
-    // Initialize terminal if not exists
-    if (!this.state.exec.terminalInstance) {
-      this.initTerminal();
-    } else {
-      // Clear terminal
-      this.state.exec.terminalInstance.clear();
-    }
+    // Always reinitialize terminal for clean state (avoids artifacts from old sessions)
+    this.initTerminal();
 
     this.updateExecStatus('connecting', 'Connecting...');
 
@@ -1324,13 +1321,8 @@ class App {
     // Close existing connection
     this.disconnectNodeExec();
 
-    // Initialize terminal if not exists
-    if (!this.state.nodeExec.terminalInstance) {
-      this.initNodeTerminal();
-    } else {
-      // Clear terminal
-      this.state.nodeExec.terminalInstance.clear();
-    }
+    // Always reinitialize terminal for clean state (avoids artifacts from old sessions)
+    this.initNodeTerminal();
 
     this.updateExecStatus('creating', 'Creating debug pod...');
     this.state.nodeExec.status = 'creating';
