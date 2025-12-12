@@ -40,6 +40,17 @@ export function createInitialState() {
       container: '',
       terminalInstance: null,
       fitAddon: null,
+      onDataDisposable: null,
+    },
+    nodeExec: {
+      socket: null,
+      connected: false,
+      status: 'disconnected', // disconnected, creating, waiting, connected, error
+      statusMessage: '',
+      nodeName: '',
+      terminalInstance: null,
+      fitAddon: null,
+      onDataDisposable: null,
     },
     sync: {
       syncing: false,

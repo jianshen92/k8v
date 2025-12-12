@@ -738,6 +738,26 @@ code { color: #81c784; }
   color: #ff6b6b;
 }
 
+/* Node exec status - creating debug pod */
+.exec-status.creating .exec-status-icon {
+  color: #42a5f5;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.exec-status.creating .exec-status-text {
+  color: #42a5f5;
+}
+
+/* Node exec status - waiting for pod ready */
+.exec-status.waiting .exec-status-icon {
+  color: #ffca28;
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.exec-status.waiting .exec-status-text {
+  color: #ffca28;
+}
+
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50% { opacity: 0.5; }
