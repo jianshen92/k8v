@@ -17,7 +17,9 @@ k8v is a **single-binary CLI tool** that connects to your Kubernetes cluster and
 
 - ✅ **Vim-Like Command Mode** - Keyboard-first navigation with `:` command palette and kubectl-style aliases
 - ✅ **Real-time Updates** - Live streaming of cluster changes via WebSocket
-- ✅ **Resource Visualization** - View Pods, Deployments, Services, Ingress, ReplicaSets, ConfigMaps, Secrets
+- ✅ **Resource Visualization** - View Pods, Deployments, Services, Ingress, ReplicaSets, ConfigMaps, Secrets, Nodes
+- ✅ **Pod Shell/Exec** - Interactive terminal access to pod containers via embedded xterm.js
+- ✅ **Node Shell** - Interactive shell access to nodes via debug pod (like `kubectl debug node`)
 - ✅ **Pod Logs Viewer** - Stream and view container logs in real-time with configurable modes (1-6 hotkeys)
 - ✅ **Search Functionality** - Quick search by resource name with keyboard shortcut (/)
 - ✅ **Multi-Context Support** - Switch between Kubernetes contexts with reactive state management
@@ -199,6 +201,8 @@ kubectl config use-context my-cluster
 - ✅ **Namespace Filtering:** Server-side filtering with searchable dropdown, keyboard navigation, and localStorage persistence (200x network reduction)
 - ✅ **Icon Consistency:** Replaced emojis with Feather Icons for cohesive glassmorphic design
 - ✅ **Pod Logs Viewer:** Real-time log streaming via WebSocket with container selection and auto-select first container
+- ✅ **Pod Shell/Exec:** Interactive terminal access to pod containers with auto shell detection (bash/sh)
+- ✅ **Node Shell:** Interactive node access via debug pod with chroot to host filesystem
 - ✅ **Search Functionality:** Search resources by name with keyboard shortcut (/) and real-time filtering
 - ✅ **Multi-Context Support:** Switch between Kubernetes contexts with reactive state synchronization
 - **Enhanced YAML View:** Syntax highlighting and clickable resource references

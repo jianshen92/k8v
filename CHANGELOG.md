@@ -6,6 +6,165 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ---
 
+## [Phase 3 Continued] - 2025-12-13
+
+### 🖥️ Node Shell Feature - Interactive Node Access
+
+Major milestone: Interactive shell access to Kubernetes nodes using the `kubectl debug node` approach. Creates a privileged debug pod on the target node for full host filesystem access.
+
+### Added
+- **Node Shell Access**: Drop into an interactive shell on any Kubernetes node
+  - Shell tab now available when viewing Node resources
+  - Uses `kubectl debug node` approach (creates privileged debug pod)
+  - Full host filesystem access via `chroot /host`
+  - Automatic debug pod cleanup on disconnect or server shutdown
+
+- **Debug Pod Lifecycle Management**:
+  - Creates debug pod with `hostPID`, `hostNetwork`, `hostIPC` enabled
+  - Mounts host root filesystem at `/host`
+  - Uses `busybox:latest` image (~1MB, minimal footprint)
+  - Pods created in `kube-system` namespace
+  - Named `k8v-debug-<node>-<timestamp>` for uniqueness
+  - Automatic cleanup with 30-second timeout on disconnect
+
+- **WebSocket Protocol Extensions**:
+  - `CREATING` message type: Debug pod creation in progress
+  - `WAITING` message type: Waiting for pod to be ready
+  - Status indicators in UI (blue pulsing for creating, yellow for waiting)
+
+- **Backend Components**:
+  - `internal/server/node_exec.go`: New WebSocket handler for node exec
+  - `NodeExecHub`: Manages concurrent node shell connections
+  - `NodeExecClient`: Per-connection state and cleanup
+  - Route: `/ws/node-exec?node=<nodename>`
+
+### Fixed
+- **Double Keystroke Bug**: Each terminal reconnect was adding duplicate `onData` handlers
+  - Solution: Store and dispose xterm.js `onData` disposables before creating new handlers
+  - Affects both pod shell and node shell
+
+- **Tab Key Not Working**: Browser was intercepting Tab key for focus management
+  - Solution: Added `attachCustomKeyEventHandler` with `preventDefault()` for Tab key
+  - Tab now correctly triggers shell autocomplete
+
+- **No Prompt/Input Echo**: Shell environment not properly initialized
+  - Initial attempt: `sh -c "..."` wrapper corrupted TTY settings
+  - Solution: Use `/usr/bin/env` to set `TERM=xterm-256color` and `HOME=/root` directly
+  - Final command: `chroot /host /usr/bin/env TERM=xterm-256color HOME=/root /bin/bash --login`
+
+- **Terminal Artifacts on Reconnect**: Old session output mixing with new connection
+  - Solution: Always reinitialize terminal instance instead of just clearing
+  - Applied to both pod shell and node shell
+
+- **Logs Race Condition**: `onclose` handler appending "[Connection closed]" after content cleared
+  - Solution: Set `currentKey = null` before closing socket to prevent stale handler execution
+
+### Technical Details
+
+**Debug Pod Specification**:
+```yaml
+apiVersion: v1
+kind: Pod
+metadata:
+  name: k8v-debug-<node>-<timestamp>
+  namespace: kube-system
+  labels:
+    app: k8v-debug
+    k8v.io/node: <node-name>
+    k8v.io/debug: "true"
+spec:
+  nodeName: <target-node>
+  hostPID: true
+  hostNetwork: true
+  hostIPC: true
+  restartPolicy: Never
+  containers:
+  - name: debug
+    image: busybox:latest
+    imagePullPolicy: IfNotPresent
+    command: ["sleep", "infinity"]
+    securityContext:
+      privileged: true
+    volumeMounts:
+    - name: host-root
+      mountPath: /host
+  volumes:
+  - name: host-root
+    hostPath:
+      path: /
+```
+
+**Shell Command**:
+```go
+command := []string{
+    "chroot", "/host",
+    "/usr/bin/env",
+    "TERM=xterm-256color",
+    "HOME=/root",
+    "/bin/bash", "--login",
+}
+```
+
+**WebSocket Protocol**:
+```
+Server -> Client: { "type": "CREATING", "data": "Creating debug pod..." }
+Server -> Client: { "type": "WAITING", "data": "Waiting for pod..." }
+Server -> Client: { "type": "CONNECTED", "data": "bash (node)" }
+Server -> Client: { "type": "OUTPUT", "data": "<shell output>" }
+Client -> Server: { "type": "INPUT", "data": "<keystrokes>" }
+Client -> Server: { "type": "RESIZE", "cols": 120, "rows": 40 }
+Server -> Client: { "type": "ERROR", "data": "<error message>" }
+Server -> Client: { "type": "CLOSE", "data": "session ended" }
+```
+
+**Terminal Reconnection Fix**:
+```javascript
+// Proper disposable handling for onData
+if (this.state.exec.onDataDisposable) {
+  this.state.exec.onDataDisposable.dispose();
+  this.state.exec.onDataDisposable = null;
+}
+this.state.exec.onDataDisposable = terminal.onData((data) => {
+  this.sendExecInput(data);
+});
+
+// Always reinitialize terminal on reconnect
+this.disconnectNodeExec();
+this.initNodeTerminal();
+```
+
+### Files Modified (8 total)
+1. `internal/k8s/exec.go` (+120 lines) - Node debug pod functions, new message types
+2. `internal/server/node_exec.go` (NEW, 370 lines) - WebSocket handler, hub, client
+3. `internal/server/server.go` (+15 lines) - Route registration, hub integration
+4. `cmd/k8v/main.go` (+5 lines) - Hub initialization
+5. `internal/server/static/config.js` (+1 line) - nodeExecWs endpoint
+6. `internal/server/static/state.js` (+12 lines) - nodeExec state object
+7. `internal/server/static/app.js` (+180 lines) - Node exec methods, terminal fixes
+8. `internal/server/static/style.css` (+20 lines) - Status indicator styles
+
+### Architecture Benefits
+- **Reuses existing infrastructure**: Same xterm.js setup as pod shell
+- **Clean lifecycle management**: Debug pods always cleaned up
+- **Graceful degradation**: Clear error messages on failure
+- **No additional dependencies**: Uses busybox (likely already cached)
+
+### Security Considerations
+- Requires cluster permissions to create privileged pods in kube-system
+- Debug pods have full host access (same as `kubectl debug node`)
+- Pods are automatically cleaned up on disconnect
+- Named with unique timestamps to avoid conflicts
+
+### Impact
+This feature enables k8v to provide full node-level debugging capabilities:
+- ✅ Interactive shell access to any node
+- ✅ Full host filesystem access via chroot
+- ✅ Automatic cleanup of debug resources
+- ✅ Same UX as pod shell (xterm.js)
+- ✅ Status feedback during pod creation
+
+---
+
 ## [Phase 3 Continued] - 2025-12-02
 
 ### ⌨️ Vim-Like Command Mode - Keyboard-First Navigation
