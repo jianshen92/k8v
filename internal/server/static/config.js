@@ -26,6 +26,7 @@ export const API_PATHS = {
   resourcesWs: '/ws',
   logsWs: '/ws/logs',
   execWs: '/ws/exec',
+  nodeExecWs: '/ws/node-exec',
 };
 
 // Single source of truth for all keyboard shortcuts

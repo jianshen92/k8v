@@ -26,6 +26,7 @@ type Server struct {
 	hub             *Hub
 	logHub          *LogHub
 	execHub         *ExecHub
+	nodeExecHub     *NodeExecHub
 	logger          *Logger
 }
 
@@ -56,12 +57,12 @@ func (d *directWatcherProvider) GetSyncStatus() interface{} {
 }
 
 // NewServerWithHub creates a new HTTP server with an existing hub (backward compatibility)
-func NewServerWithHub(port int, watcher *k8s.Watcher, hub *Hub, logHub *LogHub, execHub *ExecHub) (*Server, error) {
-	return NewServerWithProvider(port, &directWatcherProvider{watcher: watcher}, hub, logHub, execHub)
+func NewServerWithHub(port int, watcher *k8s.Watcher, hub *Hub, logHub *LogHub, execHub *ExecHub, nodeExecHub *NodeExecHub) (*Server, error) {
+	return NewServerWithProvider(port, &directWatcherProvider{watcher: watcher}, hub, logHub, execHub, nodeExecHub)
 }
 
 // NewServerWithProvider creates a new HTTP server with a watcher provider
-func NewServerWithProvider(port int, provider WatcherProvider, hub *Hub, logHub *LogHub, execHub *ExecHub) (*Server, error) {
+func NewServerWithProvider(port int, provider WatcherProvider, hub *Hub, logHub *LogHub, execHub *ExecHub, nodeExecHub *NodeExecHub) (*Server, error) {
 	logger, err := NewLogger()
 	if err != nil {
 		return nil, fmt.Errorf("failed to create logger: %w", err)
@@ -73,6 +74,7 @@ func NewServerWithProvider(port int, provider WatcherProvider, hub *Hub, logHub 
 		hub:             hub,
 		logHub:          logHub,
 		execHub:         execHub,
+		nodeExecHub:     nodeExecHub,
 		logger:          logger,
 	}, nil
 }
@@ -105,6 +107,9 @@ func (s *Server) Start() error {
 	}))
 	http.HandleFunc("/ws/exec", s.logger.LoggingMiddleware(func(w http.ResponseWriter, r *http.Request) {
 		s.handleExecWebSocket(w, r)
+	}))
+	http.HandleFunc("/ws/node-exec", s.logger.LoggingMiddleware(func(w http.ResponseWriter, r *http.Request) {
+		s.handleNodeExecWebSocket(w, r)
 	}))
 
 	addr := fmt.Sprintf(":%d", s.port)

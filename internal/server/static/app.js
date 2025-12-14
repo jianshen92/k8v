@@ -931,6 +931,8 @@ class App {
       return;
     }
 
+    // Clear currentKey first to prevent onclose handler from appending "[Connection closed]"
+    this.state.log.currentKey = null;
     if (this.state.log.socket) {
       this.state.log.socket.close();
       this.state.log.socket = null;
@@ -1064,6 +1066,15 @@ class App {
       }
     });
 
+    // Prevent browser from handling Tab key (allow terminal to handle it for autocomplete)
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (event.key === 'Tab') {
+        event.preventDefault(); // Stop browser from changing focus
+        return true; // Let xterm handle it
+      }
+      return true;
+    });
+
     // Create and load fit addon
     const fitAddon = new FitAddon.FitAddon();
     terminal.loadAddon(fitAddon);
@@ -1103,13 +1114,8 @@ class App {
     // Close existing connection
     this.disconnectExec();
 
-    // Initialize terminal if not exists
-    if (!this.state.exec.terminalInstance) {
-      this.initTerminal();
-    } else {
-      // Clear terminal
-      this.state.exec.terminalInstance.clear();
-    }
+    // Always reinitialize terminal for clean state (avoids artifacts from old sessions)
+    this.initTerminal();
 
     this.updateExecStatus('connecting', 'Connecting...');
 
@@ -1147,9 +1153,13 @@ class App {
       this.updateExecStatus('disconnected', 'Disconnected');
     };
 
-    // Set up terminal input handler
+    // Set up terminal input handler (dispose old one first to avoid duplicates)
+    if (this.state.exec.onDataDisposable) {
+      this.state.exec.onDataDisposable.dispose();
+      this.state.exec.onDataDisposable = null;
+    }
     if (this.state.exec.terminalInstance) {
-      this.state.exec.terminalInstance.onData((data) => {
+      this.state.exec.onDataDisposable = this.state.exec.terminalInstance.onData((data) => {
         this.sendExecInput(data);
       });
     }
@@ -1201,6 +1211,10 @@ class App {
       this.state.exec.socket.close();
       this.state.exec.socket = null;
     }
+    if (this.state.exec.onDataDisposable) {
+      this.state.exec.onDataDisposable.dispose();
+      this.state.exec.onDataDisposable = null;
+    }
     this.state.exec.connected = false;
     this.state.exec.container = '';
   }
@@ -1216,6 +1230,211 @@ class App {
     if (textEl) {
       textEl.textContent = text;
     }
+  }
+
+  // ---------- Node Exec (Shell) ----------
+  initNodeTerminal() {
+    // Dispose existing terminal if any
+    if (this.state.nodeExec.terminalInstance) {
+      this.state.nodeExec.terminalInstance.dispose();
+      this.state.nodeExec.terminalInstance = null;
+    }
+    if (this.state.nodeExec.fitAddon) {
+      this.state.nodeExec.fitAddon = null;
+    }
+
+    const terminalContainer = document.getElementById('exec-terminal');
+    if (!terminalContainer) return null;
+
+    // Clear container
+    terminalContainer.innerHTML = '';
+
+    // Create terminal with custom theme matching k8v style
+    const terminal = new Terminal({
+      cursorBlink: true,
+      fontSize: 14,
+      fontFamily: "'SF Mono', Monaco, 'Cascadia Code', 'Courier New', monospace",
+      theme: {
+        background: '#0a0a0a',
+        foreground: '#e0e0e0',
+        cursor: '#C4F561',
+        cursorAccent: '#0a0a0a',
+        selectionBackground: 'rgba(196, 245, 97, 0.3)',
+        black: '#000000',
+        red: '#ff6b6b',
+        green: '#4CAF50',
+        yellow: '#ffca28',
+        blue: '#42a5f5',
+        magenta: '#ab47bc',
+        cyan: '#26c6da',
+        white: '#e0e0e0',
+        brightBlack: '#666666',
+        brightRed: '#ff8a80',
+        brightGreen: '#69f0ae',
+        brightYellow: '#ffd54f',
+        brightBlue: '#82b1ff',
+        brightMagenta: '#ea80fc',
+        brightCyan: '#84ffff',
+        brightWhite: '#ffffff',
+      }
+    });
+
+    // Prevent browser from handling Tab key (allow terminal to handle it for autocomplete)
+    terminal.attachCustomKeyEventHandler((event) => {
+      if (event.key === 'Tab') {
+        event.preventDefault(); // Stop browser from changing focus
+        return true; // Let xterm handle it
+      }
+      return true;
+    });
+
+    // Create and load fit addon
+    const fitAddon = new FitAddon.FitAddon();
+    terminal.loadAddon(fitAddon);
+
+    // Open terminal in container
+    terminal.open(terminalContainer);
+
+    // Fit to container
+    setTimeout(() => fitAddon.fit(), 0);
+
+    // Store references
+    this.state.nodeExec.terminalInstance = terminal;
+    this.state.nodeExec.fitAddon = fitAddon;
+
+    // Handle resize
+    const resizeObserver = new ResizeObserver(() => {
+      if (this.state.nodeExec.fitAddon && this.state.nodeExec.terminalInstance) {
+        this.state.nodeExec.fitAddon.fit();
+        this.sendNodeExecResize();
+      }
+    });
+    resizeObserver.observe(terminalContainer);
+
+    return terminal;
+  }
+
+  connectNodeExec() {
+    const resource = this.getResourceById(this.state.ui.detailResourceId);
+    if (!resource || resource.type !== 'Node') return;
+
+    // Close existing connection
+    this.disconnectNodeExec();
+
+    // Always reinitialize terminal for clean state (avoids artifacts from old sessions)
+    this.initNodeTerminal();
+
+    this.updateExecStatus('creating', 'Creating debug pod...');
+    this.state.nodeExec.status = 'creating';
+    this.state.nodeExec.nodeName = resource.name;
+
+    const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    const params = new URLSearchParams({
+      node: resource.name,
+    });
+
+    const wsUrl = `${wsProtocol}//${window.location.host}${API_PATHS.nodeExecWs}?${params.toString()}`;
+
+    this.state.nodeExec.socket = new WebSocket(wsUrl);
+
+    this.state.nodeExec.socket.onopen = () => {
+      console.log('[NodeExecStream] Connected:', resource.name);
+    };
+
+    this.state.nodeExec.socket.onmessage = (event) => {
+      const message = JSON.parse(event.data);
+      this.handleNodeExecMessage(message);
+    };
+
+    this.state.nodeExec.socket.onerror = (error) => {
+      console.error('[NodeExecStream] WebSocket error:', error);
+      this.state.nodeExec.status = 'error';
+      this.updateExecStatus('error', 'Connection error');
+    };
+
+    this.state.nodeExec.socket.onclose = () => {
+      console.log('[NodeExecStream] Disconnected');
+      this.state.nodeExec.connected = false;
+      this.state.nodeExec.status = 'disconnected';
+      this.updateExecStatus('disconnected', 'Disconnected');
+    };
+
+    // Set up terminal input handler (dispose old one first to avoid duplicates)
+    if (this.state.nodeExec.onDataDisposable) {
+      this.state.nodeExec.onDataDisposable.dispose();
+      this.state.nodeExec.onDataDisposable = null;
+    }
+    if (this.state.nodeExec.terminalInstance) {
+      this.state.nodeExec.onDataDisposable = this.state.nodeExec.terminalInstance.onData((data) => {
+        this.sendNodeExecInput(data);
+      });
+    }
+  }
+
+  handleNodeExecMessage(message) {
+    switch (message.type) {
+      case 'CREATING':
+        this.state.nodeExec.status = 'creating';
+        this.updateExecStatus('creating', message.data);
+        break;
+      case 'WAITING':
+        this.state.nodeExec.status = 'waiting';
+        this.updateExecStatus('waiting', message.data);
+        break;
+      case 'CONNECTED':
+        this.state.nodeExec.connected = true;
+        this.state.nodeExec.status = 'connected';
+        this.updateExecStatus('connected', `Shell: ${message.data}`);
+        this.state.nodeExec.terminalInstance?.focus();
+        break;
+      case 'OUTPUT':
+        this.state.nodeExec.terminalInstance?.write(message.data);
+        break;
+      case 'ERROR':
+        this.state.nodeExec.status = 'error';
+        this.updateExecStatus('error', message.data);
+        this.state.nodeExec.terminalInstance?.writeln(`\r\n\x1b[31mError: ${message.data}\x1b[0m`);
+        break;
+      case 'CLOSE':
+        this.state.nodeExec.connected = false;
+        this.state.nodeExec.status = 'disconnected';
+        this.updateExecStatus('disconnected', message.data || 'Session ended');
+        break;
+    }
+  }
+
+  sendNodeExecInput(data) {
+    if (this.state.nodeExec.socket && this.state.nodeExec.socket.readyState === WebSocket.OPEN) {
+      this.state.nodeExec.socket.send(JSON.stringify({
+        type: 'INPUT',
+        data: data,
+      }));
+    }
+  }
+
+  sendNodeExecResize() {
+    if (this.state.nodeExec.socket && this.state.nodeExec.socket.readyState === WebSocket.OPEN && this.state.nodeExec.terminalInstance) {
+      const { cols, rows } = this.state.nodeExec.terminalInstance;
+      this.state.nodeExec.socket.send(JSON.stringify({
+        type: 'RESIZE',
+        cols: cols,
+        rows: rows,
+      }));
+    }
+  }
+
+  disconnectNodeExec() {
+    if (this.state.nodeExec.socket) {
+      this.state.nodeExec.socket.close();
+      this.state.nodeExec.socket = null;
+    }
+    if (this.state.nodeExec.onDataDisposable) {
+      this.state.nodeExec.onDataDisposable.dispose();
+      this.state.nodeExec.onDataDisposable = null;
+    }
+    this.state.nodeExec.connected = false;
+    this.state.nodeExec.status = 'disconnected';
+    this.state.nodeExec.nodeName = '';
   }
 
   async showResource(resourceId) {
@@ -1334,7 +1553,23 @@ class App {
         this.currentContainerCount = 0;
         this.currentSingleContainerValue = '';
       }
+    } else if (resource.type === 'Node') {
+      // Nodes get Shell tab but not Logs tab
+      if (logsTabButton) logsTabButton.style.display = 'none';
+      if (execTabButton) execTabButton.style.display = 'flex';
+      const containerSelector = document.getElementById('container-selector');
+      const execContainerSelector = document.getElementById('exec-container-selector');
+      if (containerSelector) containerSelector.style.display = 'none';
+      if (execContainerSelector) execContainerSelector.style.display = 'none';
+      this.currentContainerCount = 0;
+      this.currentSingleContainerValue = '';
+      // If logs tab was active, switch to overview
+      if (this.state.ui.activeDetailTab === 'logs') {
+        const overviewTab = document.querySelector('.tab[data-tab="overview"]');
+        if (overviewTab) this.switchTab('overview', overviewTab);
+      }
     } else {
+      // Other resources don't get Logs or Shell tabs
       if (logsTabButton) logsTabButton.style.display = 'none';
       if (execTabButton) execTabButton.style.display = 'none';
       const containerSelector = document.getElementById('container-selector');
@@ -1360,12 +1595,20 @@ class App {
     }
     this.state.log.currentKey = null;
 
-    // Clean up exec session
+    // Clean up pod exec session
     this.disconnectExec();
     if (this.state.exec.terminalInstance) {
       this.state.exec.terminalInstance.dispose();
       this.state.exec.terminalInstance = null;
       this.state.exec.fitAddon = null;
+    }
+
+    // Clean up node exec session
+    this.disconnectNodeExec();
+    if (this.state.nodeExec.terminalInstance) {
+      this.state.nodeExec.terminalInstance.dispose();
+      this.state.nodeExec.terminalInstance = null;
+      this.state.nodeExec.fitAddon = null;
     }
 
     this.state.ui.detailResourceId = null;
@@ -1413,18 +1656,37 @@ class App {
 
       // Disconnect exec when switching to logs
       this.disconnectExec();
+      this.disconnectNodeExec();
     } else if (tabName === 'exec') {
-      const execContainerSelector = document.getElementById('exec-container-selector');
-      const shouldShowSelector = this.currentContainerCount > 1;
-      execContainerSelector.style.display = shouldShowSelector ? 'flex' : 'none';
+      const resource = this.getResourceById(this.state.ui.detailResourceId);
 
-      if (this.currentContainerCount === 1 && this.currentSingleContainerValue && this.execContainerDropdown) {
-        this.execContainerDropdown.setValue(this.currentSingleContainerValue);
-      }
+      if (resource && resource.type === 'Node') {
+        // Node exec - no container selector needed
+        const execContainerSelector = document.getElementById('exec-container-selector');
+        if (execContainerSelector) execContainerSelector.style.display = 'none';
 
-      // Initialize terminal and connect
-      if (this.execContainerDropdown && this.execContainerDropdown.getValue()) {
-        this.connectExec();
+        // Connect to node
+        this.connectNodeExec();
+
+        // Disconnect pod exec if any
+        this.disconnectExec();
+      } else {
+        // Pod exec
+        const execContainerSelector = document.getElementById('exec-container-selector');
+        const shouldShowSelector = this.currentContainerCount > 1;
+        execContainerSelector.style.display = shouldShowSelector ? 'flex' : 'none';
+
+        if (this.currentContainerCount === 1 && this.currentSingleContainerValue && this.execContainerDropdown) {
+          this.execContainerDropdown.setValue(this.currentSingleContainerValue);
+        }
+
+        // Initialize terminal and connect
+        if (this.execContainerDropdown && this.execContainerDropdown.getValue()) {
+          this.connectExec();
+        }
+
+        // Disconnect node exec if any
+        this.disconnectNodeExec();
       }
 
       // Disconnect logs when switching to exec
@@ -1448,6 +1710,7 @@ class App {
 
       // Disconnect exec
       this.disconnectExec();
+      this.disconnectNodeExec();
     }
   }
 

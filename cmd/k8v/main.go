@@ -46,6 +46,9 @@ func main() {
 	execHub := server.NewExecHub(logger)
 	go execHub.Run()
 
+	nodeExecHub := server.NewNodeExecHub(logger)
+	go nodeExecHub.Run()
+
 	// Create and start app with current context
 	currentContext, err := k8s.GetCurrentContext()
 	if err != nil {
@@ -58,7 +61,7 @@ func main() {
 	}
 
 	// Create and start HTTP server
-	srv, err := server.NewServerWithProvider(*port, k8vApp, hub, logHub, execHub)
+	srv, err := server.NewServerWithProvider(*port, k8vApp, hub, logHub, execHub, nodeExecHub)
 	if err != nil {
 		log.Fatalf("Failed to create server: %v", err)
 	}

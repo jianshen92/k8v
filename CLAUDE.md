@@ -13,6 +13,7 @@
 - Bidirectional resource relationship navigation
 - Pod logs viewer with 6 modes (Head, Tail, Last 5m/15m/500/1000)
 - **Pod shell/exec** - Interactive terminal access to pods via xterm.js
+- **Node shell** - Interactive shell on nodes via debug pod (`kubectl debug node` approach)
 - Vim-like command mode (`:` palette with kubectl aliases)
 - Namespace/context switching without restart
 - Complete keyboard navigation (`:`, `/`, `d`, `1-6`, `Esc`)
@@ -119,6 +120,7 @@ type Relationships struct {
 | Relationship Mapping | ✅ Complete |
 | Pod Logs Viewing | ✅ Complete |
 | Pod Shell/Exec | ✅ Complete |
+| Node Shell | ✅ Complete |
 | Search Functionality | ✅ Complete |
 | Multi-Context Support | ✅ Complete |
 | Namespace Filtering | ✅ Complete |
@@ -200,4 +202,4 @@ See `HOTKEYS.md` for full documentation.
 
 ---
 
-**Last Updated:** 2025-12-05 - Pod shell/exec implemented. Interactive terminal access to pods via embedded xterm.js with auto shell detection (bash/sh) and bidirectional WebSocket streaming.
+**Last Updated:** 2025-12-13 - Node shell implemented. Interactive shell access to nodes via debug pod (`kubectl debug node` approach) with chroot to host filesystem. Also fixed terminal reconnection bugs (double keystrokes, Tab key, artifacts on reconnect).
